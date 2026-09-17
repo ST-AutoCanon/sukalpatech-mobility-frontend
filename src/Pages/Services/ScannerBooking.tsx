@@ -12,7 +12,7 @@ interface ScannerBookingModalProps {
     isOpen: boolean;
     onClose: () => void;
 }
-
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
     isOpen,
     onClose,
@@ -68,16 +68,42 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
     };
 
 
-    const availableTimes = [
-        "09:00 AM",
-        "10:00 AM",
-        "11:00 AM",
-        "12:00 PM",
-        "01:00 PM",
-        "02:00 PM",
-        "03:00 PM",
-        "04:00 PM",
-        "05:00 PM",
+    const timeSlots = [
+        {
+            startTime: "09:00 AM",
+            endTime: "12:00 PM",
+            label: "09:00 AM - 12:00 PM",
+        },
+        {
+            startTime: "10:00 AM",
+            endTime: "01:00 PM",
+            label: "10:00 AM - 01:00 PM",
+        },
+        {
+            startTime: "11:00 AM",
+            endTime: "02:00 PM",
+            label: "11:00 AM - 02:00 PM",
+        },
+        {
+            startTime: "12:00 PM",
+            endTime: "03:00 PM",
+            label: "12:00 PM - 03:00 PM",
+        },
+        {
+            startTime: "01:00 PM",
+            endTime: "04:00 PM",
+            label: "01:00 PM - 04:00 PM",
+        },
+        {
+            startTime: "02:00 PM",
+            endTime: "05:00 PM",
+            label: "02:00 PM - 05:00 PM",
+        },
+        {
+            startTime: "03:00 PM",
+            endTime: "06:00 PM",
+            label: "03:00 PM - 06:00 PM",
+        },
     ];
     interface BookingAvailability {
         date: string;
@@ -145,7 +171,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
             setAvailabilityLoading(true);
 
             const response = await fetch(
-                `http://localhost:3000/api/scanner/availability?startDate=${date}&endDate=${date}`
+                `${API_BASE_URL}/scanner/availability?startDate=${date}&endDate=${date}`
             );
 
             const result = await response.json();
@@ -180,7 +206,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
             ).padStart(2, "0")}`;
 
             const response = await fetch(
-                `http://localhost:3000/api/scanner/availability?startDate=${startDate}&endDate=${endDate}`
+                `${API_BASE_URL}/scanner/availability?startDate=${startDate}&endDate=${endDate}`
             );
 
             const result = await response.json();
@@ -279,12 +305,17 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                 return;
             }
 
+            if (endMinutes - startMinutes !== 180) {
+                alert("Scanner booking slot must be exactly 3 hours.");
+                return;
+            }
+
 
             setIsSubmitting(true);
             console.log("Booking payload:", formData);
 
             const response = await fetch(
-                "http://localhost:3000/api/scanner/bookings",
+                `${API_BASE_URL}/scanner/bookings`,
                 {
                     method: "POST",
                     headers: {
@@ -780,7 +811,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                         <div className="mb-6 sm:mb-7">
 
                             <label className="block text-[14px] sm:text-base font-semibold text-[#0A2D63] mb-3">
-                                Select Time
+                                Select Time Slot
                             </label>
 
                             {!selectedDate ? (
@@ -793,93 +824,108 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                 </div>
                             ) : (
                                 <>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 gap-3">
 
-                                        {/* Start Time */}
-                                        <div>
-                                            <label className="block text-xs sm:text-sm font-medium text-gray-600 mb-1.5">
-                                                Start Time
-                                            </label>
+                                        {timeSlots.map((slot) => {
 
-                                            <select
-                                                name="startTime"
-                                                value={formData.startTime}
-                                                onChange={(e) => {
-                                                    setRequestAnyway(false);
+                                            const isSelected =
+                                                formData.startTime === slot.startTime &&
+                                                formData.endTime === slot.endTime;
 
-                                                    setFormData((prev) => ({
-                                                        ...prev,
-                                                        startTime: e.target.value,
-                                                        endTime: "",
-                                                    }));
-                                                }}
-                                                className="w-full border border-indigo-200 rounded-lg px-3 sm:px-4 py-3 bg-white text-sm sm:text-base text-gray-900 outline-none focus:border-[#4334E8]"
-                                            >
-                                                <option value="">
-                                                    Select start time
-                                                </option>
+                                            const bookingsForDate = availability.filter(
+                                                (booking) => booking.date === selectedDate
+                                            );
 
-                                                {availableTimes.map((time) => (
-                                                    <option
-                                                        key={time}
-                                                        value={time}
-                                                    >
-                                                        {time}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        {/* End Time */}
-                                        <div>
-                                            <label className="block text-xs sm:text-sm font-medium text-gray-600 mb-1.5">
-                                                End Time
-                                            </label>
-
-                                            <select
-                                                name="endTime"
-                                                value={formData.endTime}
-                                                disabled={!formData.startTime}
-                                                onChange={(e) => {
-                                                    setRequestAnyway(false);
-                                                    handleChange(e);
-                                                }}
-                                                className="w-full border border-indigo-200 rounded-lg px-3 sm:px-4 py-3 bg-white text-sm sm:text-base text-gray-900 outline-none focus:border-[#4334E8] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                                            >
-                                                <option value="">
-                                                    {formData.startTime
-                                                        ? "Select end time"
-                                                        : "Select start time first"}
-                                                </option>
-
-                                                {availableTimes
-                                                    .filter(
-                                                        (time) =>
-                                                            convertTimeToMinutes(time) >
-                                                            convertTimeToMinutes(
-                                                                formData.startTime
-                                                            )
+                                            const overlappingBooking = bookingsForDate.find(
+                                                (booking) =>
+                                                    isTimeOverlapping(
+                                                        slot.startTime,
+                                                        slot.endTime,
+                                                        booking.startTime,
+                                                        booking.endTime
                                                     )
-                                                    .map((time) => (
-                                                        <option
-                                                            key={time}
-                                                            value={time}
+                                            );
+
+                                            const isReserved =
+                                                overlappingBooking?.status === "approved";
+
+                                            const isPending =
+                                                overlappingBooking?.status === "pending";
+
+                                            return (
+                                                <button
+                                                    key={slot.label}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setRequestAnyway(false);
+
+                                                        setFormData((prev) => ({
+                                                            ...prev,
+                                                            startTime: slot.startTime,
+                                                            endTime: slot.endTime,
+                                                        }));
+                                                    }}
+                                                    className={`
+                                w-full rounded-lg border px-4 py-3
+                                text-left transition
+                                flex items-center justify-between
+                                gap-3
+                                ${isSelected
+                                                            ? "border-[#4334E8] bg-indigo-50"
+                                                            : isReserved
+                                                                ? "border-pink-200 bg-pink-50"
+                                                                : isPending
+                                                                    ? "border-yellow-200 bg-yellow-50"
+                                                                    : "border-indigo-200 bg-white hover:border-[#4334E8] hover:bg-indigo-50"
+                                                        }
+                            `}
+                                                >
+
+                                                    <div>
+                                                        <p
+                                                            className={`text-sm sm:text-base font-semibold ${isSelected
+                                                                    ? "text-[#4334E8]"
+                                                                    : "text-[#0A2D63]"
+                                                                }`}
                                                         >
-                                                            {time}
-                                                        </option>
-                                                    ))}
-                                            </select>
-                                        </div>
+                                                            {slot.label}
+                                                        </p>
+
+                                                        {isReserved && (
+                                                            <p className="mt-1 text-xs text-pink-600">
+                                                                Reserved
+                                                            </p>
+                                                        )}
+
+                                                        {isPending && (
+                                                            <p className="mt-1 text-xs text-yellow-600">
+                                                                Pending Approval
+                                                            </p>
+                                                        )}
+                                                    </div>
+
+                                                    {isSelected && (
+                                                        <span className="text-[#4334E8] font-bold">
+                                                            ✓
+                                                        </span>
+                                                    )}
+
+                                                </button>
+                                            );
+                                        })}
+
                                     </div>
+
                                     {selectedTimeStatus === "reserved" && (
                                         <div className="mt-3 rounded-lg border border-pink-200 bg-pink-50 p-3">
+
                                             <p className="text-sm font-semibold text-pink-700">
                                                 ✕ This time slot is already reserved
                                             </p>
 
                                             <p className="mt-1 text-xs text-pink-600">
-                                                This time overlaps with an existing booking.
-                                                Please select another time.
+                                                This time overlaps with an existing approved
+                                                booking.
                                             </p>
 
                                             {!requestAnyway ? (
@@ -895,11 +941,13 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                                     ✓ You can submit a request for this time slot.
                                                 </p>
                                             )}
+
                                         </div>
                                     )}
 
                                     {selectedTimeStatus === "pending" && (
                                         <div className="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+
                                             <p className="text-sm font-semibold text-yellow-700">
                                                 ⚠ This time slot has a pending request
                                             </p>
@@ -922,74 +970,69 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                                     ✓ You can submit a request for this time slot.
                                                 </p>
                                             )}
+
                                         </div>
                                     )}
 
-                                    {/* Selected interval */}
-                                    {formData.startTime &&
-                                        formData.endTime && (
-                                            <div className="mt-3 rounded-lg bg-indigo-50 border border-indigo-100 px-3 sm:px-4 py-3">
-                                                <p className="text-xs sm:text-sm text-[#0A2D63]">
-                                                    Selected time:
-                                                    <span className="font-bold ml-1">
-                                                        {formData.startTime}
-                                                        {" - "}
-                                                        {formData.endTime}
-                                                    </span>
-                                                </p>
-                                            </div>
-                                        )}
+                                    {formData.startTime && formData.endTime && (
+                                        <div className="mt-3 rounded-lg bg-indigo-50 border border-indigo-100 px-3 sm:px-4 py-3">
 
-
-
-                                    {/* Existing bookings */}
-                                    {availability.length > 0 && (
-                                        <div className="mt-4">
-
-                                            <p className="text-xs sm:text-sm font-semibold text-[#0A2D63] mb-2">
-                                                Existing bookings for this date
+                                            <p className="text-xs sm:text-sm text-[#0A2D63]">
+                                                Selected time:
+                                                <span className="font-bold ml-1">
+                                                    {formData.startTime}
+                                                    {" - "}
+                                                    {formData.endTime}
+                                                </span>
                                             </p>
 
-                                            <div className="space-y-2">
-
-                                                {availability.map(
-                                                    (booking, index) => (
-                                                        <div
-                                                            key={`${booking.date}-${booking.startTime}-${booking.endTime}-${index}`}
-                                                            className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5"
-                                                        >
-
-                                                            <span className="text-xs sm:text-sm font-medium text-gray-700">
-                                                                {booking.startTime}
-                                                                {" - "}
-                                                                {booking.endTime}
-                                                            </span>
-
-                                                            <span
-                                                                className={`shrink-0 rounded-full px-2 py-1 text-[10px] sm:text-xs font-semibold ${booking.status ===
-                                                                    "approved"
-                                                                    ? "bg-pink-100 text-pink-700"
-                                                                    : "bg-yellow-100 text-yellow-700"
-                                                                    }`}
-                                                            >
-                                                                {booking.status ===
-                                                                    "approved"
-                                                                    ? "Reserved"
-                                                                    : "Pending"}
-                                                            </span>
-
-                                                        </div>
-                                                    )
-                                                )}
-
-                                            </div>
                                         </div>
                                     )}
+
+                                    {/* Existing bookings */}
+                                    {/* {availability.length > 0 && (
+                <div className="mt-4">
+
+                    <p className="text-xs sm:text-sm font-semibold text-[#0A2D63] mb-2">
+                        Existing bookings for this date
+                    </p>
+
+                    <div className="space-y-2">
+
+                        {availability.map((booking, index) => (
+                            <div
+                                key={`${booking.date}-${booking.startTime}-${booking.endTime}-${index}`}
+                                className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5"
+                            >
+
+                                <span className="text-xs sm:text-sm font-medium text-gray-700">
+                                    {booking.startTime}
+                                    {" - "}
+                                    {booking.endTime}
+                                </span>
+
+                                <span
+                                    className={`shrink-0 rounded-full px-2 py-1 text-[10px] sm:text-xs font-semibold ${
+                                        booking.status === "approved"
+                                            ? "bg-pink-100 text-pink-700"
+                                            : "bg-yellow-100 text-yellow-700"
+                                    }`}
+                                >
+                                    {booking.status === "approved"
+                                        ? "Reserved"
+                                        : "Pending"}
+                                </span>
+
+                            </div>
+                        ))}
+
+                    </div>
+                </div>
+            )} */}
                                 </>
                             )}
 
                         </div>
-
                         {/* Purpose */}
                         <div className="mb-6 sm:mb-7">
 
