@@ -3,6 +3,8 @@ import { LockKeyhole, Mail, Eye, EyeOff, LogIn } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const ScannerAdminLogin = () => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
     const navigate = useNavigate();
 
     const [email, setEmail] = useState("");
@@ -25,7 +27,7 @@ const ScannerAdminLogin = () => {
             setIsLoading(true);
 
             const response = await fetch(
-                "http://localhost:3000/api/scanner-admin/login",
+                `${API_BASE_URL}/api/scanner-admin/login`,
                 {
                     method: "POST",
                     headers: {

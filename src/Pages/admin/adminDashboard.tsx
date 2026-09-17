@@ -36,6 +36,8 @@ const ScannerAdminDashboard = () => {
     const [activeFilter, setActiveFilter] = useState<
         "all" | BookingStatus
     >("all");
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
 
     const [searchTerm, setSearchTerm] = useState("");
 
@@ -48,6 +50,7 @@ const ScannerAdminDashboard = () => {
 
     const [error, setError] = useState("");
     const [adminComment, setAdminComment] = useState("");
+    const [selectedAvailableTime, setSelectedAvailableTime] = useState("");
     const [actionLoading, setActionLoading] = useState(false);
     const [actionError, setActionError] = useState("");
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -69,7 +72,7 @@ const ScannerAdminDashboard = () => {
             }
 
             const response = await fetch(
-                "http://localhost:3000/api/scanner-admin/bookings",
+                `${API_BASE_URL}/api/scanner-admin/bookings`,
                 {
                     method: "GET",
                     headers: {
@@ -208,74 +211,104 @@ const ScannerAdminDashboard = () => {
     // Booking action
     // --------------------------------------------------
 
-    const handleBookingAction = async (
-        action: "approve" | "reject"
-    ) => {
-        if (!selectedBooking) return;
+   const handleBookingAction = async (
+    action: "approve" | "reject"
+) => {
+    if (!selectedBooking) return;
 
-        try {
-            setActionLoading(true);
-            setActionError("");
+    try {
+        setActionLoading(true);
+        setActionError("");
 
-            const token = localStorage.getItem("scannerAdminToken");
+        const token = localStorage.getItem("scannerAdminToken");
 
-            if (!token) {
-                window.location.href = "/scanner-admin/login";
-                return;
-            }
-
-            const response = await fetch(
-                `http://localhost:3000/api/scanner-admin/bookings/${selectedBooking._id}/${action}`,
-                {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                        adminComment: adminComment.trim(),
-                    }),
-                }
-            );
-
-            const result = await response.json();
-
-            if (response.status === 401) {
-                localStorage.removeItem("scannerAdminToken");
-                localStorage.removeItem("scannerAdmin");
-
-                window.location.href = "/scanner-admin/login";
-                return;
-            }
-
-            if (!response.ok) {
-                throw new Error(
-                    result.message || `Failed to ${action} booking.`
-                );
-            }
-
-            setBookings((prevBookings) =>
-                prevBookings.map((booking) =>
-                    booking._id === selectedBooking._id
-                        ? result.data
-                        : booking
-                )
-            );
-
-            setSelectedBooking(result.data);
-            setAdminComment("");
-        } catch (error) {
-            console.error(`${action} booking error:`, error);
-
-            setActionError(
-                error instanceof Error
-                    ? error.message
-                    : `Failed to ${action} booking.`
-            );
-        } finally {
-            setActionLoading(false);
+        if (!token) {
+            window.location.href = "/scanner-admin/login";
+            return;
         }
-    };
+
+        // Applicant's originally requested time
+        const requestedTime =
+            `${selectedBooking.startTime} - ${selectedBooking.endTime}`;
+
+        // Check whether admin actually changed the time
+        const hasChangedTime =
+            selectedAvailableTime &&
+            selectedAvailableTime !== requestedTime;
+
+        const requestBody: {
+            adminComment: string;
+            startTime?: string;
+            endTime?: string;
+        } = {
+            adminComment: adminComment.trim(),
+        };
+
+        // Only send a new time if admin changed it
+        if (hasChangedTime) {
+            const [startTime, endTime] =
+                selectedAvailableTime.split(" - ");
+
+            requestBody.startTime = startTime;
+            requestBody.endTime = endTime;
+        }
+
+        const response = await fetch(
+            `${API_BASE_URL}/api/scanner-admin/bookings/${selectedBooking._id}/${action}`,
+            {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(requestBody),
+            }
+        );
+
+        const result = await response.json();
+
+        if (response.status === 401) {
+            localStorage.removeItem("scannerAdminToken");
+            localStorage.removeItem("scannerAdmin");
+
+            window.location.href = "/scanner-admin/login";
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                result.message ||
+                `Failed to ${action} booking.`
+            );
+        }
+
+        setBookings((prevBookings) =>
+            prevBookings.map((booking) =>
+                booking._id === selectedBooking._id
+                    ? result.data
+                    : booking
+            )
+        );
+
+        setSelectedBooking(result.data);
+        setAdminComment("");
+
+    } catch (error) {
+        console.error(
+            `${action} booking error:`,
+            error
+        );
+
+        setActionError(
+            error instanceof Error
+                ? error.message
+                : `Failed to ${action} booking.`
+        );
+
+    } finally {
+        setActionLoading(false);
+    }
+};
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -602,8 +635,8 @@ const ScannerAdminDashboard = () => {
                                             )
                                         }
                                         className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition sm:px-4 sm:text-sm ${activeFilter === filter.value
-                                                ? "bg-[#0A2D63] text-white"
-                                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                            ? "bg-[#0A2D63] text-white"
+                                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                                             }`}
                                     >
                                         {filter.label}
@@ -750,13 +783,16 @@ const ScannerAdminDashboard = () => {
 
                                                     <button
                                                         onClick={() => {
-                                                            setSelectedBooking(
-                                                                booking
-                                                            );
+                                                            setSelectedBooking(booking);
+
                                                             setAdminComment(
-                                                                booking.adminComment ||
-                                                                ""
+                                                                booking.adminComment || ""
                                                             );
+
+                                                            setSelectedAvailableTime(
+                                                                `${booking.startTime} - ${booking.endTime}`
+                                                            );
+
                                                             setActionError("");
                                                         }}
                                                         className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-[#0A2D63] hover:bg-blue-50 hover:text-[#0A2D63]"
@@ -954,6 +990,67 @@ const ScannerAdminDashboard = () => {
 
                                 {/* Admin Comment */}
 
+                                {/* Select Time Slot */}
+
+                                <div className="sm:col-span-2">
+
+                                    <p className="text-sm text-gray-600 mb-2">
+                                        Applicant requested:
+                                        <span className="font-semibold text-gray-800 ml-1">
+                                            {selectedBooking.startTime} - {selectedBooking.endTime}
+                                        </span>
+                                    </p>
+
+                                    {/* Admin time selection */}
+                                    <select
+                                        value={selectedAvailableTime}
+                                        onChange={(e) => setSelectedAvailableTime(e.target.value)}
+                                        disabled={selectedBooking.status !== "pending"}
+                                        className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm
+               focus:outline-none focus:ring-2 focus:ring-[#4334E8]
+               focus:border-[#4334E8] disabled:bg-gray-100"
+                                    >
+                                        <option value="09:00 - 12:00">
+                                            09:00 AM - 12:00 PM
+                                        </option>
+
+                                        <option value="10:00 - 13:00">
+                                            10:00 AM - 01:00 PM
+                                        </option>
+
+                                        <option value="11:00 - 14:00">
+                                            11:00 AM - 02:00 PM
+                                        </option>
+
+                                        <option value="12:00 - 15:00">
+                                            12:00 PM - 03:00 PM
+                                        </option>
+
+                                        <option value="13:00 - 16:00">
+                                            01:00 PM - 04:00 PM
+                                        </option>
+
+                                        <option value="14:00 - 17:00">
+                                            02:00 PM - 05:00 PM
+                                        </option>
+
+                                        <option value="15:00 - 18:00">
+                                            03:00 PM - 06:00 PM
+                                        </option>
+                                    </select>
+
+                                    {/* Instruction */}
+                                    <p className="mt-2 text-xs text-gray-500">
+                                        If the requested time is acceptable, leave it unchanged.
+                                        <br />
+                                        Select another slot only if required after discussion with the applicant.
+                                    </p>
+
+                                </div>
+
+
+                                {/* Admin Comment */}
+
                                 <div className="sm:col-span-2">
 
                                     <p className="text-xs font-medium text-gray-800">
@@ -965,9 +1062,7 @@ const ScannerAdminDashboard = () => {
                                         <textarea
                                             value={adminComment}
                                             onChange={(e) =>
-                                                setAdminComment(
-                                                    e.target.value
-                                                )
+                                                setAdminComment(e.target.value)
                                             }
                                             placeholder="Enter a comment for the applicant..."
                                             rows={4}
@@ -977,8 +1072,7 @@ const ScannerAdminDashboard = () => {
                                     ) : (
 
                                         <div className="mt-1 break-words text-sm font-semibold text-gray-800">
-                                            {selectedBooking.adminComment ||
-                                                "—"}
+                                            {selectedBooking.adminComment || "—"}
                                         </div>
 
                                     )}
@@ -1045,6 +1139,7 @@ const ScannerAdminDashboard = () => {
                                         onClick={() => {
                                             setSelectedBooking(null);
                                             setAdminComment("");
+                                            setSelectedAvailableTime("");
                                             setActionError("");
                                         }}
                                         disabled={actionLoading}
