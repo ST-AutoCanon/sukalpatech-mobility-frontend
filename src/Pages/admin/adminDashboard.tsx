@@ -72,7 +72,7 @@ const ScannerAdminDashboard = () => {
             }
 
             const response = await fetch(
-                `${API_BASE_URL}/api/scanner-admin/bookings`,
+                `${API_BASE_URL}/scanner-admin/bookings`,
                 {
                     method: "GET",
                     headers: {
@@ -254,7 +254,7 @@ const ScannerAdminDashboard = () => {
         }
 
         const response = await fetch(
-            `${API_BASE_URL}/api/scanner-admin/bookings/${selectedBooking._id}/${action}`,
+            `${API_BASE_URL}/scanner-admin/bookings/${selectedBooking._id}/${action}`,
             {
                 method: "PUT",
                 headers: {

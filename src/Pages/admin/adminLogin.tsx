@@ -27,7 +27,7 @@ const ScannerAdminLogin = () => {
             setIsLoading(true);
 
             const response = await fetch(
-                `${API_BASE_URL}/api/scanner-admin/login`,
+                `${API_BASE_URL}/scanner-admin/login`,
                 {
                     method: "POST",
                     headers: {

@@ -171,7 +171,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
             setAvailabilityLoading(true);
 
             const response = await fetch(
-                `${API_BASE_URL}/api/scanner/availability?startDate=${date}&endDate=${date}`
+                `${API_BASE_URL}/scanner/availability?startDate=${date}&endDate=${date}`
             );
 
             const result = await response.json();
@@ -206,7 +206,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
             ).padStart(2, "0")}`;
 
             const response = await fetch(
-                `${API_BASE_URL}/api/scanner/availability?startDate=${startDate}&endDate=${endDate}`
+                `${API_BASE_URL}/scanner/availability?startDate=${startDate}&endDate=${endDate}`
             );
 
             const result = await response.json();
@@ -315,7 +315,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
             console.log("Booking payload:", formData);
 
             const response = await fetch(
-                `${API_BASE_URL}/api/scanner/bookings`,
+                `${API_BASE_URL}/scanner/bookings`,
                 {
                     method: "POST",
                     headers: {
