@@ -27,9 +27,7 @@ interface Booking {
     mobile: string;
     department: string;
     contactMethod: string;
-
     bookings: BookingSlot[];
-
     purpose: string;
     concerns: string;
     status: BookingStatus;
@@ -239,6 +237,7 @@ const ScannerAdminDashboard = () => {
     };
 
     const timeOptions = [
+        "08:00 AM",
         "09:00 AM",
         "09:30 AM",
         "10:00 AM",
