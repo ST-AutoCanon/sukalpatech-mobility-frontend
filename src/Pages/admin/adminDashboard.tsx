@@ -13,6 +13,12 @@ import {
 
 type BookingStatus = "pending" | "approved" | "rejected";
 
+interface BookingSlot {
+    date: string;
+    startTime: string;
+    endTime: string;
+}
+
 interface Booking {
     _id: string;
     bookingId: string;
@@ -21,9 +27,9 @@ interface Booking {
     mobile: string;
     department: string;
     contactMethod: string;
-    date: string;
-    startTime: string;
-    endTime: string;
+
+    bookings: BookingSlot[];
+
     purpose: string;
     concerns: string;
     status: BookingStatus;
@@ -50,8 +56,9 @@ const ScannerAdminDashboard = () => {
 
     const [error, setError] = useState("");
     const [adminComment, setAdminComment] = useState("");
-    const [selectedAvailableTime, setSelectedAvailableTime] = useState("");
-    const [actionLoading, setActionLoading] = useState(false);
+    const [selectedBookingSlots, setSelectedBookingSlots] = useState<
+        BookingSlot[]
+    >([]); const [actionLoading, setActionLoading] = useState(false);
     const [actionError, setActionError] = useState("");
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -196,6 +203,30 @@ const ScannerAdminDashboard = () => {
         );
     };
 
+    const convertTimeToMinutes = (time: string) => {
+        if (!time) return -1;
+
+        const [timePart, modifier] = time.split(" ");
+
+        if (!timePart || !modifier) return -1;
+
+        let [hours, minutes] = timePart.split(":").map(Number);
+
+        if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+            return -1;
+        }
+
+        if (modifier.toUpperCase() === "PM" && hours !== 12) {
+            hours += 12;
+        }
+
+        if (modifier.toUpperCase() === "AM" && hours === 12) {
+            hours = 0;
+        }
+
+        return hours * 60 + minutes;
+    };
+
     // --------------------------------------------------
     // Logout
     // --------------------------------------------------
@@ -207,108 +238,142 @@ const ScannerAdminDashboard = () => {
         window.location.href = "/scanner-admin/login";
     };
 
+    const timeOptions = [
+        "09:00 AM",
+        "09:30 AM",
+        "10:00 AM",
+        "10:30 AM",
+        "11:00 AM",
+        "11:30 AM",
+        "12:00 PM",
+        "12:30 PM",
+        "01:00 PM",
+        "01:30 PM",
+        "02:00 PM",
+        "02:30 PM",
+        "03:00 PM",
+        "03:30 PM",
+        "04:00 PM",
+        "04:30 PM",
+        "05:00 PM",
+        "05:30 PM",
+        "06:00 PM",
+    ];
+
     // --------------------------------------------------
     // Booking action
     // --------------------------------------------------
 
-   const handleBookingAction = async (
-    action: "approve" | "reject"
-) => {
-    if (!selectedBooking) return;
+    const handleBookingAction = async (
+        action: "approve" | "reject"
+    ) => {
+        if (!selectedBooking) return;
 
-    try {
-        setActionLoading(true);
-        setActionError("");
+        try {
+            setActionLoading(true);
+            setActionError("");
 
-        const token = localStorage.getItem("scannerAdminToken");
+            const token = localStorage.getItem("scannerAdminToken");
 
-        if (!token) {
-            window.location.href = "/scanner-admin/login";
-            return;
-        }
-
-        // Applicant's originally requested time
-        const requestedTime =
-            `${selectedBooking.startTime} - ${selectedBooking.endTime}`;
-
-        // Check whether admin actually changed the time
-        const hasChangedTime =
-            selectedAvailableTime &&
-            selectedAvailableTime !== requestedTime;
-
-        const requestBody: {
-            adminComment: string;
-            startTime?: string;
-            endTime?: string;
-        } = {
-            adminComment: adminComment.trim(),
-        };
-
-        // Only send a new time if admin changed it
-        if (hasChangedTime) {
-            const [startTime, endTime] =
-                selectedAvailableTime.split(" - ");
-
-            requestBody.startTime = startTime;
-            requestBody.endTime = endTime;
-        }
-
-        const response = await fetch(
-            `${API_BASE_URL}/scanner-admin/bookings/${selectedBooking._id}/${action}`,
-            {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify(requestBody),
+            if (!token) {
+                window.location.href = "/scanner-admin/login";
+                return;
             }
-        );
 
-        const result = await response.json();
+            // Validate all selected dates and times
+            for (const slot of selectedBookingSlots) {
+                if (!slot.date || !slot.startTime || !slot.endTime) {
+                    throw new Error(
+                        "Please select date, start time and end time for all booking dates."
+                    );
+                }
 
-        if (response.status === 401) {
-            localStorage.removeItem("scannerAdminToken");
-            localStorage.removeItem("scannerAdmin");
+                const startMinutes = convertTimeToMinutes(slot.startTime);
+                const endMinutes = convertTimeToMinutes(slot.endTime);
 
-            window.location.href = "/scanner-admin/login";
-            return;
-        }
+                if (startMinutes < 0 || endMinutes < 0) {
+                    throw new Error(
+                        `Invalid time selected for ${formatDate(slot.date)}.`
+                    );
+                }
 
-        if (!response.ok) {
-            throw new Error(
-                result.message ||
-                `Failed to ${action} booking.`
+                if (endMinutes <= startMinutes) {
+                    throw new Error(
+                        `End time must be later than start time for ${formatDate(
+                            slot.date
+                        )}.`
+                    );
+                }
+            }
+
+            const requestBody = {
+                adminComment: adminComment.trim(),
+                bookings: selectedBookingSlots,
+            };
+
+            console.log("Admin action payload:", requestBody);
+
+            const response = await fetch(
+                `${API_BASE_URL}/scanner-admin/bookings/${selectedBooking._id}/${action}`,
+                {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify(requestBody),
+                }
             );
+
+            const result = await response.json();
+
+            if (response.status === 401) {
+                localStorage.removeItem("scannerAdminToken");
+                localStorage.removeItem("scannerAdmin");
+
+                window.location.href = "/scanner-admin/login";
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error(
+                    result.message ||
+                    `Failed to ${action} booking.`
+                );
+            }
+
+            setBookings((prevBookings) =>
+                prevBookings.map((booking) =>
+                    booking._id === selectedBooking._id
+                        ? result.data
+                        : booking
+                )
+            );
+
+            setSelectedBooking(result.data);
+
+            setSelectedBookingSlots(
+                result.data.bookings || []
+            );
+
+            setAdminComment(result.data.adminComment || "");
+
+        } catch (error) {
+            console.error(
+                `${action} booking error:`,
+                error
+            );
+
+            setActionError(
+                error instanceof Error
+                    ? error.message
+                    : `Failed to ${action} booking.`
+            );
+
+        } finally {
+            setActionLoading(false);
         }
-
-        setBookings((prevBookings) =>
-            prevBookings.map((booking) =>
-                booking._id === selectedBooking._id
-                    ? result.data
-                    : booking
-            )
-        );
-
-        setSelectedBooking(result.data);
-        setAdminComment("");
-
-    } catch (error) {
-        console.error(
-            `${action} booking error:`,
-            error
-        );
-
-        setActionError(
-            error instanceof Error
-                ? error.message
-                : `Failed to ${action} booking.`
-        );
-
-    } finally {
-        setActionLoading(false);
-    }
-};
+    };
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -730,17 +795,15 @@ const ScannerAdminDashboard = () => {
                                                 key={booking._id}
                                                 className="border-b border-gray-100 transition hover:bg-gray-50"
                                             >
-
+                                                {/* Booking ID */}
                                                 <td className="px-4 py-4 sm:px-5">
-
                                                     <p className="text-sm font-semibold text-[#0A2D63]">
                                                         {booking.bookingId}
                                                     </p>
-
                                                 </td>
 
+                                                {/* Applicant */}
                                                 <td className="px-4 py-4 sm:px-5">
-
                                                     <p className="text-sm font-semibold text-gray-800">
                                                         {booking.fullName}
                                                     </p>
@@ -748,39 +811,56 @@ const ScannerAdminDashboard = () => {
                                                     <p className="mt-0.5 max-w-[220px] truncate text-xs text-gray-500">
                                                         {booking.email}
                                                     </p>
-
                                                 </td>
 
+                                                {/* Date */}
                                                 <td className="px-4 py-4 text-sm text-gray-600 sm:px-5">
-                                                    {formatDate(booking.date)}
+                                                    <div className="space-y-2">
+                                                        {(booking.bookings || []).map((slot, index) => (
+                                                            <div key={`${slot.date}-${index}`}>
+                                                                {formatDate(slot.date)}
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </td>
 
+                                                {/* Time */}
                                                 <td className="px-4 py-4 text-sm text-gray-600 sm:px-5">
-                                                    {booking.startTime} - {booking.endTime}
+                                                    <div className="space-y-2">
+                                                        {(booking.bookings || []).map((slot, index) => (
+                                                            <div
+                                                                key={`${slot.date}-${index}`}
+                                                                className="whitespace-nowrap"
+                                                            >
+                                                                {slot.startTime} - {slot.endTime}
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </td>
 
-                                                <td className="max-w-[220px] px-4 py-4 text-sm text-gray-600 sm:px-5">
-                                                    <p className="truncate">
+                                                {/* Purpose */}
+                                                <td className="max-w-[220px] px-4 py-4 sm:px-5">
+                                                    <p
+                                                        className="truncate text-sm text-gray-600"
+                                                        title={booking.purpose}
+                                                    >
                                                         {booking.purpose}
                                                     </p>
                                                 </td>
 
+                                                {/* Status */}
                                                 <td className="px-4 py-4 sm:px-5">
-
                                                     <span
                                                         className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(
                                                             booking.status
                                                         )}`}
                                                     >
-                                                        {getStatusLabel(
-                                                            booking.status
-                                                        )}
+                                                        {getStatusLabel(booking.status)}
                                                     </span>
-
                                                 </td>
 
+                                                {/* Action */}
                                                 <td className="px-4 py-4 text-right sm:px-5">
-
                                                     <button
                                                         onClick={() => {
                                                             setSelectedBooking(booking);
@@ -789,8 +869,12 @@ const ScannerAdminDashboard = () => {
                                                                 booking.adminComment || ""
                                                             );
 
-                                                            setSelectedAvailableTime(
-                                                                `${booking.startTime} - ${booking.endTime}`
+                                                            setSelectedBookingSlots(
+                                                                (booking.bookings || []).map((slot) => ({
+                                                                    date: slot.date,
+                                                                    startTime: slot.startTime,
+                                                                    endTime: slot.endTime,
+                                                                }))
                                                             );
 
                                                             setActionError("");
@@ -800,9 +884,7 @@ const ScannerAdminDashboard = () => {
                                                         <Eye size={15} />
                                                         View
                                                     </button>
-
                                                 </td>
-
                                             </tr>
 
                                         ))
@@ -918,33 +1000,146 @@ const ScannerAdminDashboard = () => {
 
                                 </div>
 
-                                {/* Date */}
+                                {/* Requested Dates & Time Slots */}
+                                <div className="sm:col-span-2">
+                                    <div className="mb-3">
+                                        <p className="text-xs font-medium text-gray-500">
+                                            Requested Dates & Time Slots
+                                        </p>
 
-                                <div className="min-w-0">
+                                        <p className="mt-1 text-xs text-gray-400">
+                                            Admin can modify the time slot before approving the booking  if they have any concern.
+                                        </p>
+                                    </div>
 
-                                    <p className="text-xs font-medium text-gray-500">
-                                        Date
-                                    </p>
+                                    <div className="space-y-3">
+                                        {selectedBookingSlots.length === 0 ? (
+                                            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                                                No booking dates found.
+                                            </div>
+                                        ) : (
+                                            selectedBookingSlots.map((slot, index) => (
+                                                <div
+                                                    key={`${slot.date}-${index}`}
+                                                    className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+                                                >
+                                                    {/* Date */}
+                                                    <div className="mb-4">
+                                                        <p className="text-xs font-medium text-gray-500">
+                                                            Date
+                                                        </p>
 
-                                    <p className="mt-1 text-sm font-semibold text-gray-800">
-                                        {formatDate(selectedBooking.date)}
-                                    </p>
+                                                        <p className="mt-1 text-sm font-semibold text-gray-800">
+                                                            {formatDate(slot.date)}
+                                                        </p>
+                                                    </div>
 
+                                                    {/* Time Selection */}
+                                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+                                                        {/* Start Time */}
+                                                        <div>
+                                                            <label className="mb-1.5 block text-xs font-medium text-gray-600">
+                                                                Start Time
+                                                            </label>
+
+                                                            <select
+                                                                value={slot.startTime}
+                                                                onChange={(e) => {
+                                                                    const updatedSlots = [
+                                                                        ...selectedBookingSlots,
+                                                                    ];
+
+                                                                    updatedSlots[index] = {
+                                                                        ...updatedSlots[index],
+                                                                        startTime: e.target.value,
+                                                                    };
+
+                                                                    setSelectedBookingSlots(updatedSlots);
+                                                                    setActionError("");
+                                                                }}
+                                                                disabled={
+                                                                    selectedBooking.status !== "pending"
+                                                                }
+                                                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#0A2D63] focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-gray-100"
+                                                            >
+                                                                <option value="">
+                                                                    Select start time
+                                                                </option>
+
+                                                                {timeOptions.map((time) => (
+                                                                    <option
+                                                                        key={time}
+                                                                        value={time}
+                                                                    >
+                                                                        {time}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+
+                                                        {/* End Time */}
+                                                        <div>
+                                                            <label className="mb-1.5 block text-xs font-medium text-gray-600">
+                                                                End Time
+                                                            </label>
+
+                                                            <select
+                                                                value={slot.endTime}
+                                                                onChange={(e) => {
+                                                                    const updatedSlots = [
+                                                                        ...selectedBookingSlots,
+                                                                    ];
+
+                                                                    updatedSlots[index] = {
+                                                                        ...updatedSlots[index],
+                                                                        endTime: e.target.value,
+                                                                    };
+
+                                                                    setSelectedBookingSlots(updatedSlots);
+                                                                    setActionError("");
+                                                                }}
+                                                                disabled={
+                                                                    selectedBooking.status !== "pending"
+                                                                }
+                                                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#0A2D63] focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-gray-100"
+                                                            >
+                                                                <option value="">
+                                                                    Select end time
+                                                                </option>
+
+                                                                {timeOptions.map((time) => (
+                                                                    <option
+                                                                        key={time}
+                                                                        value={time}
+                                                                    >
+                                                                        {time}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+
+                                                   
+                                                    {/* Validation */}
+                                                    {slot.startTime &&
+                                                        slot.endTime &&
+                                                        convertTimeToMinutes(slot.endTime) <=
+                                                        convertTimeToMinutes(slot.startTime) && (
+                                                            <div className="mt-3">
+                                                                <p className="text-xs font-medium text-red-600">
+                                                                    End time must be later than start time.
+                                                                </p>
+                                                            </div>
+                                                        )}
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
                                 </div>
 
-                                {/* Time Slot */}
 
-                                <div className="min-w-0">
 
-                                    <p className="text-xs font-medium text-gray-500">
-                                        Time Slot
-                                    </p>
-
-                                    <p className="mt-1 break-words text-sm font-semibold text-gray-800">
-                                        {selectedBooking.startTime} - {selectedBooking.endTime}
-                                    </p>
-
-                                </div>
 
                                 {/* Contact Method */}
 
@@ -987,67 +1182,6 @@ const ScannerAdminDashboard = () => {
                                     </div>
 
                                 </div>
-
-                                {/* Admin Comment */}
-
-                                {/* Select Time Slot */}
-
-                                <div className="sm:col-span-2">
-
-                                    <p className="text-sm text-gray-600 mb-2">
-                                        Applicant requested:
-                                        <span className="font-semibold text-gray-800 ml-1">
-                                            {selectedBooking.startTime} - {selectedBooking.endTime}
-                                        </span>
-                                    </p>
-
-                                    {/* Admin time selection */}
-                                    <select
-                                        value={selectedAvailableTime}
-                                        onChange={(e) => setSelectedAvailableTime(e.target.value)}
-                                        disabled={selectedBooking.status !== "pending"}
-                                        className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm
-               focus:outline-none focus:ring-2 focus:ring-[#4334E8]
-               focus:border-[#4334E8] disabled:bg-gray-100"
-                                    >
-                                        <option value="09:00 - 12:00">
-                                            09:00 AM - 12:00 PM
-                                        </option>
-
-                                        <option value="10:00 - 13:00">
-                                            10:00 AM - 01:00 PM
-                                        </option>
-
-                                        <option value="11:00 - 14:00">
-                                            11:00 AM - 02:00 PM
-                                        </option>
-
-                                        <option value="12:00 - 15:00">
-                                            12:00 PM - 03:00 PM
-                                        </option>
-
-                                        <option value="13:00 - 16:00">
-                                            01:00 PM - 04:00 PM
-                                        </option>
-
-                                        <option value="14:00 - 17:00">
-                                            02:00 PM - 05:00 PM
-                                        </option>
-
-                                        <option value="15:00 - 18:00">
-                                            03:00 PM - 06:00 PM
-                                        </option>
-                                    </select>
-
-                                    {/* Instruction */}
-                                    <p className="mt-2 text-xs text-gray-500">
-                                        If the requested time is acceptable, leave it unchanged.
-                                        <br />
-                                        Select another slot only if required after discussion with the applicant.
-                                    </p>
-
-                                </div>
-
 
                                 {/* Admin Comment */}
 
@@ -1139,7 +1273,6 @@ const ScannerAdminDashboard = () => {
                                         onClick={() => {
                                             setSelectedBooking(null);
                                             setAdminComment("");
-                                            setSelectedAvailableTime("");
                                             setActionError("");
                                         }}
                                         disabled={actionLoading}
