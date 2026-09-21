@@ -93,6 +93,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
     }
 
     const timeOptions = [
+        "08:00 AM",
         "09:00 AM",
         "09:30 AM",
         "10:00 AM",
