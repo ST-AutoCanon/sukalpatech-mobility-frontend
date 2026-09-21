@@ -36,9 +36,22 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
     );
 
 
-    const [selectedDate, setSelectedDate] = useState("");
+    const [selectedDates, setSelectedDates] = useState<string[]>([]);
+
+    const [selectedSlots, setSelectedSlots] = useState<
+        Record<string, { startTime: string; endTime: string }>
+    >({});
+    const [availabilityByDate, setAvailabilityByDate] = useState<
+        Record<string, BookingAvailability[]>
+    >({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [requestAnyway, setRequestAnyway] = useState(false);
+    const [slotConflict, setSlotConflict] = useState<{
+        date: string;
+        startTime: string;
+        endTime: string;
+        status: "pending" | "approved";
+    } | null>(null);
 
     const resetForm = () => {
         setFormData({
@@ -55,11 +68,14 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
             concerns: "",
         });
 
-        setSelectedDate("");
+        setSelectedDates([]);
+        setSelectedSlots({});
         setAvailability([]);
+        setAvailabilityByDate({});
         setRequestAnyway(false);
         setIsSubmitting(false);
         setAvailabilityLoading(false);
+        setSlotConflict(null);
     };
 
     const handleClose = () => {
@@ -68,49 +84,35 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
     };
 
 
-    const timeSlots = [
-        {
-            startTime: "09:00 AM",
-            endTime: "12:00 PM",
-            label: "09:00 AM - 12:00 PM",
-        },
-        {
-            startTime: "10:00 AM",
-            endTime: "01:00 PM",
-            label: "10:00 AM - 01:00 PM",
-        },
-        {
-            startTime: "11:00 AM",
-            endTime: "02:00 PM",
-            label: "11:00 AM - 02:00 PM",
-        },
-        {
-            startTime: "12:00 PM",
-            endTime: "03:00 PM",
-            label: "12:00 PM - 03:00 PM",
-        },
-        {
-            startTime: "01:00 PM",
-            endTime: "04:00 PM",
-            label: "01:00 PM - 04:00 PM",
-        },
-        {
-            startTime: "02:00 PM",
-            endTime: "05:00 PM",
-            label: "02:00 PM - 05:00 PM",
-        },
-        {
-            startTime: "03:00 PM",
-            endTime: "06:00 PM",
-            label: "03:00 PM - 06:00 PM",
-        },
-    ];
+
     interface BookingAvailability {
         date: string;
         startTime: string;
         endTime: string;
         status: "pending" | "approved";
     }
+
+    const timeOptions = [
+        "09:00 AM",
+        "09:30 AM",
+        "10:00 AM",
+        "10:30 AM",
+        "11:00 AM",
+        "11:30 AM",
+        "12:00 PM",
+        "12:30 PM",
+        "01:00 PM",
+        "01:30 PM",
+        "02:00 PM",
+        "02:30 PM",
+        "03:00 PM",
+        "03:30 PM",
+        "04:00 PM",
+        "04:30 PM",
+        "05:00 PM",
+        "05:30 PM",
+        "06:00 PM",
+    ];
 
     const convertTimeToMinutes = (time: string): number => {
         if (!time) return -1;
@@ -182,10 +184,20 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                 );
             }
 
-            setAvailability(result.data || []);
+            const data = result.data || [];
+
+            setAvailabilityByDate((prev) => ({
+                ...prev,
+                [date]: data,
+            }));
+
         } catch (error) {
             console.error("Availability error:", error);
-            setAvailability([]);
+
+            setAvailabilityByDate((prev) => ({
+                ...prev,
+                [date]: [],
+            }));
         } finally {
             setAvailabilityLoading(false);
         }
@@ -217,7 +229,27 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                 );
             }
 
-            setAvailability(result.data || []);
+            const monthAvailability = result.data || [];
+
+            setAvailability(monthAvailability);
+
+            const groupedAvailability: Record<
+                string,
+                BookingAvailability[]
+            > = {};
+
+            monthAvailability.forEach((item: BookingAvailability) => {
+                if (!groupedAvailability[item.date]) {
+                    groupedAvailability[item.date] = [];
+                }
+
+                groupedAvailability[item.date].push(item);
+            });
+
+            setAvailabilityByDate((prev) => ({
+                ...prev,
+                ...groupedAvailability,
+            }));
         } catch (error) {
             console.error("Month availability error:", error);
             setAvailability([]);
@@ -256,124 +288,241 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
     };
 
     const handleSubmit = async () => {
-        try {
-            if (!formData.fullName.trim()) {
-                alert("Please enter your full name.");
-                return;
-            }
+    try {
+        if (!formData.fullName.trim()) {
+            alert("Please enter your full name.");
+            return;
+        }
 
-            if (!formData.email.trim()) {
-                alert("Please enter your email.");
-                return;
-            }
+        if (!formData.email.trim()) {
+            alert("Please enter your email.");
+            return;
+        }
 
-            if (!formData.mobile) {
-                alert("Please enter your mobile number.");
-                return;
-            }
+        if (!formData.mobile) {
+            alert("Please enter your mobile number.");
+            return;
+        }
 
-            if (!formData.contactMethod) {
-                alert("Please select a preferred contact method.");
-                return;
-            }
+        if (!formData.contactMethod) {
+            alert("Please select a preferred contact method.");
+            return;
+        }
 
-            if (!formData.date) {
-                alert("Please select a date.");
-                return;
-            }
+        // --------------------------------------------------
+        // Validate selected dates
+        // --------------------------------------------------
 
-            if (!formData.startTime) {
-                alert("Please select a start time.");
-                return;
-            }
+        if (!selectedDates.length) {
+            alert("Please select at least one date.");
+            return;
+        }
 
-            if (!formData.endTime) {
-                alert("Please select an end time.");
-                return;
-            }
+        if (selectedDates.length > 3) {
+            alert("You can select a maximum of 3 dates.");
+            return;
+        }
 
-            const startMinutes = convertTimeToMinutes(
-                formData.startTime
-            );
+        // --------------------------------------------------
+        // Build all selected date + time combinations
+        // --------------------------------------------------
 
-            const endMinutes = convertTimeToMinutes(
-                formData.endTime
-            );
+        const bookingDates = selectedDates.map((date) => {
+            const slot = selectedSlots[date];
 
-            if (endMinutes <= startMinutes) {
-                alert("End time must be later than start time.");
-                return;
-            }
+            return {
+                date,
+                startTime: slot?.startTime || "",
+                endTime: slot?.endTime || "",
+            };
+        });
 
-            if (endMinutes - startMinutes !== 180) {
-                alert("Scanner booking slot must be exactly 3 hours.");
-                return;
-            }
+        // --------------------------------------------------
+        // Validate every selected date
+        // --------------------------------------------------
 
-
-            setIsSubmitting(true);
-            console.log("Booking payload:", formData);
-
-            const response = await fetch(
-                `${API_BASE_URL}/scanner/bookings`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        ...formData,
-                        requestAnyway,
-                    }),
-                }
-            );
-
-            const result = await response.json();
-
-            console.log("Booking API status:", response.status);
-            console.log("Booking API response:", result);
-
-            if (!response.ok) {
+        for (const booking of bookingDates) {
+            if (!booking.startTime) {
                 alert(
-                    result.message ||
-                    result.error ||
-                    "Failed to submit scanner request."
+                    `Please select a start time for ${booking.date}.`
                 );
                 return;
             }
 
-            alert(
-                `Scanner request submitted successfully.\n\nBooking ID: ${result.data.bookingId}`
+            if (!booking.endTime) {
+                alert(
+                    `Please select an end time for ${booking.date}.`
+                );
+                return;
+            }
+
+            const startMinutes = convertTimeToMinutes(
+                booking.startTime
             );
 
-            setFormData({
-                fullName: "",
-                email: "",
-                countryCode: "+91",
-                mobile: "",
-                department: "",
-                contactMethod: "",
-                date: "",
-                startTime: "",
-                endTime: "",
-                purpose: "",
-                concerns: "",
-            });
-
-            setSelectedDate("");
-            setAvailability([]);
-
-            onClose();
-        } catch (error) {
-            console.error("Scanner booking error:", error);
-
-            alert(
-                "Unable to submit scanner request. Please try again."
+            const endMinutes = convertTimeToMinutes(
+                booking.endTime
             );
-        } finally {
-            setIsSubmitting(false);
+
+            if (startMinutes < 0 || endMinutes < 0) {
+                alert(
+                    `Please select a valid time for ${booking.date}.`
+                );
+                return;
+            }
+
+            if (endMinutes <= startMinutes) {
+                alert(
+                    `End time must be later than start time for ${booking.date}.`
+                );
+                return;
+            }
         }
-    };
+
+        // --------------------------------------------------
+        // Check conflicts for all selected dates
+        // --------------------------------------------------
+
+        if (!requestAnyway) {
+            for (const booking of bookingDates) {
+                const bookingsForDate =
+                    availabilityByDate[booking.date] || [];
+
+                const startMinutes = convertTimeToMinutes(
+                    booking.startTime
+                );
+
+                const endMinutes = convertTimeToMinutes(
+                    booking.endTime
+                );
+
+                const hasConflict = bookingsForDate.some(
+                    (existingBooking) => {
+                        const existingStart =
+                            convertTimeToMinutes(
+                                existingBooking.startTime
+                            );
+
+                        const existingEnd =
+                            convertTimeToMinutes(
+                                existingBooking.endTime
+                            );
+
+                        return (
+                            startMinutes < existingEnd &&
+                            endMinutes > existingStart
+                        );
+                    }
+                );
+
+                if (hasConflict) {
+                    alert(
+                        `The selected time on ${booking.date} is already reserved. Please select another time or choose Request Anyway.`
+                    );
+                    return;
+                }
+            }
+        }
+
+        // --------------------------------------------------
+        // Submit
+        // --------------------------------------------------
+
+        setIsSubmitting(true);
+
+        const payload = {
+            fullName: formData.fullName,
+            email: formData.email,
+            countryCode: formData.countryCode,
+            mobile: formData.mobile,
+            department: formData.department,
+            contactMethod: formData.contactMethod,
+            purpose: formData.purpose,
+            concerns: formData.concerns,
+
+            // ALL selected dates and times
+            bookings: bookingDates,
+
+            requestAnyway,
+        };
+
+        console.log("Booking payload:", payload);
+
+        const response = await fetch(
+            `${API_BASE_URL}/scanner/bookings`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(payload),
+            }
+        );
+
+        const result = await response.json();
+
+        console.log(
+            "Booking API status:",
+            response.status
+        );
+
+        console.log(
+            "Booking API response:",
+            result
+        );
+
+        if (!response.ok) {
+            alert(
+                result.message ||
+                    result.error ||
+                    "Failed to submit scanner request."
+            );
+            return;
+        }
+
+        alert(
+            `Scanner request submitted successfully.\n\nBooking ID: ${result.data.bookingId}`
+        );
+
+        // --------------------------------------------------
+        // Reset form
+        // --------------------------------------------------
+
+        setFormData({
+            fullName: "",
+            email: "",
+            countryCode: "+91",
+            mobile: "",
+            department: "",
+            contactMethod: "",
+            date: "",
+            startTime: "",
+            endTime: "",
+            purpose: "",
+            concerns: "",
+        });
+
+        setSelectedDates([]);
+        setSelectedSlots({});
+        setAvailability([]);
+        setAvailabilityByDate({});
+        setSlotConflict(null);
+        setRequestAnyway(false);
+
+        onClose();
+    } catch (error) {
+        console.error(
+            "Scanner booking error:",
+            error
+        );
+
+        alert(
+            "Unable to submit scanner request. Please try again."
+        );
+    } finally {
+        setIsSubmitting(false);
+    }
+};
 
     const getDaysInMonth = (date: Date) => {
         return new Date(
@@ -402,30 +551,46 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
     };
 
     const handleDateSelect = async (date: string) => {
-        // Do not allow selecting past dates
         if (isPastDate(date)) {
             return;
         }
 
-        setSelectedDate(date);
-
         setRequestAnyway(false);
 
-        setFormData((prev) => ({
-            ...prev,
-            date,
-            startTime: "",
-            endTime: "",
-        }));
+        // If date is already selected → remove it
+        if (selectedDates.includes(date)) {
+            setSelectedDates((prev) =>
+                prev.filter((item) => item !== date)
+            );
 
-        await fetchAvailability(date);
+            setSelectedSlots((prev) => {
+                const updated = { ...prev };
+                delete updated[date];
+                return updated;
+            });
+
+            return;
+        }
+
+        // Maximum 3 dates
+        if (selectedDates.length >= 3) {
+            alert("You can select a maximum of 3 dates for a scanner request.");
+            return;
+        }
+
+        // Add new date
+        setSelectedDates((prev) => [...prev, date]);
+
+        // Fetch availability for this specific date
+        if (!availabilityByDate[date]) {
+            await fetchAvailability(date);
+        }
     };
 
 
     const getDateStatus = (date: string) => {
-        const bookingsForDate = availability.filter(
-            (item) => item.date === date
-        );
+        const bookingsForDate =
+            availabilityByDate[date] || [];
 
         if (bookingsForDate.length === 0) {
             return "available";
@@ -450,47 +615,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
         return "pending";
     };
 
-    const getSelectedTimeStatus = () => {
-        if (
-            !selectedDate ||
-            !formData.startTime ||
-            !formData.endTime
-        ) {
-            return null;
-        }
 
-        const startMinutes = convertTimeToMinutes(formData.startTime);
-        const endMinutes = convertTimeToMinutes(formData.endTime);
-
-        if (endMinutes <= startMinutes) {
-            return "invalid";
-        }
-
-        const bookingsForDate = availability.filter(
-            (item) => item.date === selectedDate
-        );
-
-        const overlappingBooking = bookingsForDate.find((booking) =>
-            isTimeOverlapping(
-                formData.startTime,
-                formData.endTime,
-                booking.startTime,
-                booking.endTime
-            )
-        );
-
-        if (!overlappingBooking) {
-            return "available";
-        }
-
-        if (overlappingBooking.status === "approved") {
-            return "reserved";
-        }
-
-        return "pending";
-    };
-
-    const selectedTimeStatus = getSelectedTimeStatus();
 
     const previousMonth = () => {
         setCurrentMonth(
@@ -738,7 +863,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                                 day
                                             );
 
-                                            const isSelected = selectedDate === date;
+                                            const isSelected = selectedDates.includes(date);
 
 
                                             const dateStatus = getDateStatus(date);
@@ -782,254 +907,444 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                             </div>
 
                             {/* Selected Date */}
-                            {selectedDate && (
-                                <div className="mt-3 bg-indigo-50 border border-indigo-100 rounded-lg px-3 sm:px-4 py-3">
+                            {selectedDates.length > 0 && (
+                                <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 p-3 sm:p-4">
 
-                                    <p className="text-[13px] sm:text-base font-medium text-[#4334E8]">
-                                        Selected Date:{" "}
-                                        <span className="font-bold">
-                                            {new Date(
-                                                `${selectedDate}T00:00:00`
-                                            ).toLocaleDateString(
-                                                "en-IN",
-                                                {
-                                                    day: "numeric",
-                                                    month: "long",
-                                                    year: "numeric",
-                                                }
-                                            )}
+                                    <div className="mb-2 flex items-center justify-between">
+                                        <p className="text-sm font-semibold text-[#0A2D63]">
+                                            Selected Dates
+                                        </p>
+
+                                        <span className="rounded-full bg-[#4334E8] px-2.5 py-1 text-xs font-semibold text-white">
+                                            {selectedDates.length}/3
                                         </span>
-                                    </p>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedDates.map((date) => {
+                                            const dateObj = new Date(`${date}T00:00:00`);
+
+                                            return (
+                                                <div
+                                                    key={date}
+                                                    className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2"
+                                                >
+                                                    <span className="text-xs sm:text-sm font-semibold text-[#0A2D63]">
+                                                        {dateObj.toLocaleDateString("en-IN", {
+                                                            day: "2-digit",
+                                                            month: "short",
+                                                            year: "numeric",
+                                                            weekday: "short",
+                                                        })}
+                                                    </span>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDateSelect(date)}
+                                                        className="text-gray-400 hover:text-red-500"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
 
                                 </div>
                             )}
 
                         </div>
 
-                        {/* Time */}
-                        {/* Time Selection */}
+                      
+
+                        {/* =====================================================
+    TIME SELECTION FOR EACH SELECTED DATE
+===================================================== */}
+
                         <div className="mb-6 sm:mb-7">
 
                             <label className="block text-[14px] sm:text-base font-semibold text-[#0A2D63] mb-3">
-                                Select Time Slot
+                                Select Time for Each Date
                             </label>
 
-                            {!selectedDate ? (
+                            {selectedDates.length === 0 ? (
+
                                 <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 sm:px-4 py-3.5 text-[13px] sm:text-sm text-[#4334E8]">
-                                    Please select a date first.
+                                    Please select at least one date first.
                                 </div>
+
                             ) : availabilityLoading ? (
+
                                 <div className="rounded-lg border border-indigo-100 bg-gray-50 px-3 sm:px-4 py-3.5 text-[13px] sm:text-sm text-gray-500">
                                     Checking scanner availability...
                                 </div>
+
                             ) : (
-                                <>
-                                    <div className="grid grid-cols-1 gap-3">
 
-                                        {timeSlots.map((slot) => {
+                                <div className="space-y-4">
 
-                                            const isSelected =
-                                                formData.startTime === slot.startTime &&
-                                                formData.endTime === slot.endTime;
+                                    {selectedDates.map((date, dateIndex) => {
 
-                                            const bookingsForDate = availability.filter(
-                                                (booking) => booking.date === selectedDate
-                                            );
+                                        const dateObj = new Date(`${date}T00:00:00`);
 
-                                            const overlappingBooking = bookingsForDate.find(
-                                                (booking) =>
+                                        const bookingsForDate =
+                                            availabilityByDate[date] || [];
+
+                                        const selectedSlot =
+                                            selectedSlots[date];
+
+                                        const selectedStartTime =
+                                            selectedSlot?.startTime || "";
+
+                                        const selectedEndTime =
+                                            selectedSlot?.endTime || "";
+
+                                        /*
+                                         * Check if currently selected time overlaps
+                                         * with an existing pending/approved booking.
+                                         */
+                                        const conflictingBooking =
+                                            selectedStartTime && selectedEndTime
+                                                ? bookingsForDate.find((booking) =>
                                                     isTimeOverlapping(
-                                                        slot.startTime,
-                                                        slot.endTime,
+                                                        selectedStartTime,
+                                                        selectedEndTime,
                                                         booking.startTime,
                                                         booking.endTime
                                                     )
-                                            );
+                                                )
+                                                : null;
 
-                                            const isReserved =
-                                                overlappingBooking?.status === "approved";
+                                        const isConflict =
+                                            !!conflictingBooking;
 
-                                            const isPending =
-                                                overlappingBooking?.status === "pending";
+                                        return (
+                                            <div
+                                                key={date}
+                                                className="rounded-xl border border-indigo-100 bg-white p-3 sm:p-4"
+                                            >
 
-                                            return (
-                                                <button
-                                                    key={slot.label}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setRequestAnyway(false);
+                                                {/* Date Header */}
+                                                <div className="mb-4 flex items-center gap-2">
 
-                                                        setFormData((prev) => ({
-                                                            ...prev,
-                                                            startTime: slot.startTime,
-                                                            endTime: slot.endTime,
-                                                        }));
-                                                    }}
-                                                    className={`
-                                w-full rounded-lg border px-4 py-3
-                                text-left transition
-                                flex items-center justify-between
-                                gap-3
-                                ${isSelected
-                                                            ? "border-[#4334E8] bg-indigo-50"
-                                                            : isReserved
-                                                                ? "border-pink-200 bg-pink-50"
-                                                                : isPending
-                                                                    ? "border-yellow-200 bg-yellow-50"
-                                                                    : "border-indigo-200 bg-white hover:border-[#4334E8] hover:bg-indigo-50"
-                                                        }
-                            `}
-                                                >
-
-                                                    <div>
-                                                        <p
-                                                            className={`text-sm sm:text-base font-semibold ${isSelected
-                                                                    ? "text-[#4334E8]"
-                                                                    : "text-[#0A2D63]"
-                                                                }`}
-                                                        >
-                                                            {slot.label}
-                                                        </p>
-
-                                                        {isReserved && (
-                                                            <p className="mt-1 text-xs text-pink-600">
-                                                                Reserved
-                                                            </p>
-                                                        )}
-
-                                                        {isPending && (
-                                                            <p className="mt-1 text-xs text-yellow-600">
-                                                                Pending Approval
-                                                            </p>
-                                                        )}
+                                                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#4334E8] text-xs font-bold text-white">
+                                                        {dateIndex + 1}
                                                     </div>
 
-                                                    {isSelected && (
-                                                        <span className="text-[#4334E8] font-bold">
-                                                            ✓
-                                                        </span>
+                                                    <div>
+                                                        <p className="text-sm font-bold text-[#0A2D63]">
+                                                            {dateObj.toLocaleDateString(
+                                                                "en-IN",
+                                                                {
+                                                                    weekday: "short",
+                                                                    day: "2-digit",
+                                                                    month: "short",
+                                                                    year: "numeric",
+                                                                }
+                                                            )}
+                                                        </p>
+
+                                                        <p className="text-[11px] text-gray-500">
+                                                            Select start time and end time
+                                                        </p>
+                                                    </div>
+
+                                                </div>
+
+                                                {/* Time Selection */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                                                    {/* Start Time */}
+                                                    <div>
+
+                                                        <label className="mb-2 block text-xs sm:text-sm font-semibold text-[#0A2D63]">
+                                                            Start Time
+                                                        </label>
+
+                                                        <select
+                                                            value={selectedStartTime}
+                                                            onChange={(e) => {
+
+                                                                const startTime =
+                                                                    e.target.value;
+
+                                                                setSlotConflict(null);
+                                                                setRequestAnyway(false);
+
+                                                                setSelectedSlots((prev) => ({
+                                                                    ...prev,
+                                                                    [date]: {
+                                                                        startTime,
+                                                                        endTime:
+                                                                            prev[date]?.endTime ||
+                                                                            "",
+                                                                    },
+                                                                }));
+
+                                                                setFormData((prev) => ({
+                                                                    ...prev,
+                                                                    date,
+                                                                    startTime,
+                                                                    endTime:
+                                                                        prev.endTime || "",
+                                                                }));
+                                                            }}
+                                                            className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-3 text-sm text-gray-900 outline-none transition focus:border-[#4334E8] focus:ring-1 focus:ring-[#4334E8]"
+                                                        >
+
+                                                            <option value="">
+                                                                Select start time
+                                                            </option>
+
+                                                            {timeOptions.map((time) => (
+                                                                <option
+                                                                    key={time}
+                                                                    value={time}
+                                                                >
+                                                                    {time}
+                                                                </option>
+                                                            ))}
+
+                                                        </select>
+
+                                                    </div>
+
+                                                    {/* End Time */}
+                                                    <div>
+
+                                                        <label className="mb-2 block text-xs sm:text-sm font-semibold text-[#0A2D63]">
+                                                            End Time
+                                                        </label>
+
+                                                        <select
+                                                            value={selectedEndTime}
+                                                            onChange={(e) => {
+
+                                                                const endTime =
+                                                                    e.target.value;
+
+                                                                setSlotConflict(null);
+                                                                setRequestAnyway(false);
+
+                                                                setSelectedSlots((prev) => ({
+                                                                    ...prev,
+                                                                    [date]: {
+                                                                        startTime:
+                                                                            prev[date]?.startTime ||
+                                                                            "",
+                                                                        endTime,
+                                                                    },
+                                                                }));
+
+                                                                setFormData((prev) => ({
+                                                                    ...prev,
+                                                                    date,
+                                                                    startTime:
+                                                                        prev.startTime || "",
+                                                                    endTime,
+                                                                }));
+                                                            }}
+                                                            className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-3 text-sm text-gray-900 outline-none transition focus:border-[#4334E8] focus:ring-1 focus:ring-[#4334E8]"
+                                                        >
+
+                                                            <option value="">
+                                                                Select end time
+                                                            </option>
+
+                                                            {timeOptions.map((time) => (
+                                                                <option
+                                                                    key={time}
+                                                                    value={time}
+                                                                >
+                                                                    {time}
+                                                                </option>
+                                                            ))}
+
+                                                        </select>
+
+                                                    </div>
+
+                                                </div>
+
+                                                {/* Duration Information */}
+                                                {selectedStartTime &&
+                                                    selectedEndTime && (
+                                                        <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
+
+                                                            <p className="text-xs text-[#0A2D63]">
+
+                                                                Selected time:
+
+                                                                <span className="ml-1 font-bold text-[#4334E8]">
+                                                                    {selectedStartTime}
+                                                                    {" - "}
+                                                                    {selectedEndTime}
+                                                                </span>
+
+                                                            </p>
+
+                                                            {(() => {
+
+                                                                const start =
+                                                                    convertTimeToMinutes(
+                                                                        selectedStartTime
+                                                                    );
+
+                                                                const end =
+                                                                    convertTimeToMinutes(
+                                                                        selectedEndTime
+                                                                    );
+
+                                                                const duration =
+                                                                    end - start;
+
+                                                                if (duration > 0) {
+
+                                                                    return (
+                                                                        <p className="mt-1 text-[11px] text-gray-600">
+                                                                            Duration:{" "}
+                                                                            {Math.floor(
+                                                                                duration / 60
+                                                                            )}
+                                                                            hr{" "}
+                                                                            {duration % 60 > 0
+                                                                                ? `${duration % 60} min`
+                                                                                : ""}
+                                                                        </p>
+                                                                    );
+
+                                                                }
+
+                                                                return null;
+
+                                                            })()}
+
+                                                        </div>
                                                     )}
 
-                                                </button>
-                                            );
-                                        })}
+                                                {/* Conflict Warning */}
+                                                {isConflict &&
+                                                    selectedStartTime &&
+                                                    selectedEndTime && (
 
-                                    </div>
+                                                        <div className="mt-3 rounded-xl border border-orange-200 bg-orange-50 p-3 sm:p-4">
 
-                                    {selectedTimeStatus === "reserved" && (
-                                        <div className="mt-3 rounded-lg border border-pink-200 bg-pink-50 p-3">
+                                                            <div className="flex items-start gap-3">
 
-                                            <p className="text-sm font-semibold text-pink-700">
-                                                ✕ This time slot is already reserved
-                                            </p>
+                                                                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-600 font-bold">
+                                                                    !
+                                                                </div>
 
-                                            <p className="mt-1 text-xs text-pink-600">
-                                                This time overlaps with an existing approved
-                                                booking.
-                                            </p>
+                                                                <div className="flex-1">
 
-                                            {!requestAnyway ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setRequestAnyway(true)}
-                                                    className="mt-3 rounded-lg bg-pink-600 px-4 py-2 text-xs font-semibold text-white hover:bg-pink-700 transition"
-                                                >
-                                                    Request Anyway
-                                                </button>
-                                            ) : (
-                                                <p className="mt-2 text-xs font-semibold text-pink-700">
-                                                    ✓ You can submit a request for this time slot.
-                                                </p>
-                                            )}
+                                                                    <p className="text-sm font-semibold text-orange-800">
 
-                                        </div>
-                                    )}
+                                                                        This time slot is already{" "}
 
-                                    {selectedTimeStatus === "pending" && (
-                                        <div className="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+                                                                        {conflictingBooking?.status ===
+                                                                            "approved"
+                                                                            ? "reserved"
+                                                                            : "pending approval"}.
 
-                                            <p className="text-sm font-semibold text-yellow-700">
-                                                ⚠ This time slot has a pending request
-                                            </p>
+                                                                    </p>
 
-                                            <p className="mt-1 text-xs text-yellow-600">
-                                                Someone has already requested this time slot.
-                                                You can still submit your request if needed.
-                                            </p>
+                                                                    <p className="mt-1 text-xs sm:text-sm leading-5 text-orange-700">
 
-                                            {!requestAnyway ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setRequestAnyway(true)}
-                                                    className="mt-3 rounded-lg bg-yellow-600 px-4 py-2 text-xs font-semibold text-white hover:bg-yellow-700 transition"
-                                                >
-                                                    Request Anyway
-                                                </button>
-                                            ) : (
-                                                <p className="mt-2 text-xs font-semibold text-yellow-700">
-                                                    ✓ You can submit a request for this time slot.
-                                                </p>
-                                            )}
+                                                                        Please select another date
+                                                                        or time slot, or you can
+                                                                        request this slot anyway.
 
-                                        </div>
-                                    )}
+                                                                    </p>
 
-                                    {formData.startTime && formData.endTime && (
-                                        <div className="mt-3 rounded-lg bg-indigo-50 border border-indigo-100 px-3 sm:px-4 py-3">
+                                                                    <div className="mt-3 flex flex-col sm:flex-row gap-2">
 
-                                            <p className="text-xs sm:text-sm text-[#0A2D63]">
-                                                Selected time:
-                                                <span className="font-bold ml-1">
-                                                    {formData.startTime}
-                                                    {" - "}
-                                                    {formData.endTime}
-                                                </span>
-                                            </p>
+                                                                        {/* Select Another */}
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
 
-                                        </div>
-                                    )}
+                                                                                setRequestAnyway(
+                                                                                    false
+                                                                                );
 
-                                    {/* Existing bookings */}
-                                    {/* {availability.length > 0 && (
-                <div className="mt-4">
+                                                                                setSlotConflict(
+                                                                                    null
+                                                                                );
 
-                    <p className="text-xs sm:text-sm font-semibold text-[#0A2D63] mb-2">
-                        Existing bookings for this date
-                    </p>
+                                                                                setSelectedSlots(
+                                                                                    (prev) => ({
+                                                                                        ...prev,
+                                                                                        [date]: {
+                                                                                            startTime:
+                                                                                                "",
+                                                                                            endTime:
+                                                                                                "",
+                                                                                        },
+                                                                                    })
+                                                                                );
 
-                    <div className="space-y-2">
+                                                                                setFormData(
+                                                                                    (prev) => ({
+                                                                                        ...prev,
+                                                                                        date,
+                                                                                        startTime:
+                                                                                            "",
+                                                                                        endTime:
+                                                                                            "",
+                                                                                    })
+                                                                                );
 
-                        {availability.map((booking, index) => (
-                            <div
-                                key={`${booking.date}-${booking.startTime}-${booking.endTime}-${index}`}
-                                className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5"
-                            >
+                                                                            }}
+                                                                            className="rounded-lg border border-orange-300 bg-white px-4 py-2 text-xs sm:text-sm font-semibold text-orange-700 hover:bg-orange-100 transition"
+                                                                        >
+                                                                            Select Another Slot
+                                                                        </button>
 
-                                <span className="text-xs sm:text-sm font-medium text-gray-700">
-                                    {booking.startTime}
-                                    {" - "}
-                                    {booking.endTime}
-                                </span>
+                                                                        {/* Request Anyway */}
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setRequestAnyway(
+                                                                                    true
+                                                                                );
 
-                                <span
-                                    className={`shrink-0 rounded-full px-2 py-1 text-[10px] sm:text-xs font-semibold ${
-                                        booking.status === "approved"
-                                            ? "bg-pink-100 text-pink-700"
-                                            : "bg-yellow-100 text-yellow-700"
-                                    }`}
-                                >
-                                    {booking.status === "approved"
-                                        ? "Reserved"
-                                        : "Pending"}
-                                </span>
+                                                                                setSlotConflict({
+                                                                                    date,
+                                                                                    startTime:
+                                                                                        selectedStartTime,
+                                                                                    endTime:
+                                                                                        selectedEndTime,
+                                                                                    status:
+                                                                                        conflictingBooking!
+                                                                                            .status,
+                                                                                });
+                                                                            }}
+                                                                            className={`rounded-lg px-4 py-2 text-xs sm:text-sm font-semibold transition ${requestAnyway
+                                                                                    ? "bg-green-600 text-white"
+                                                                                    : "bg-orange-500 text-white hover:bg-orange-600"
+                                                                                }`}
+                                                                        >
+                                                                            {requestAnyway
+                                                                                ? "Request Anyway Selected"
+                                                                                : "Request Anyway"}
+                                                                        </button>
 
-                            </div>
-                        ))}
+                                                                    </div>
 
-                    </div>
-                </div>
-            )} */}
-                                </>
+                                                                </div>
+
+                                                            </div>
+
+                                                        </div>
+                                                    )}
+
+                                            </div>
+                                        );
+
+                                    })}
+
+                                </div>
+
                             )}
 
                         </div>
