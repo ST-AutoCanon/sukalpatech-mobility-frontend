@@ -289,105 +289,73 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
     };
 
     const handleSubmit = async () => {
-    try {
-        if (!formData.fullName.trim()) {
-            alert("Please enter your full name.");
-            return;
-        }
-
-        if (!formData.email.trim()) {
-            alert("Please enter your email.");
-            return;
-        }
-
-        if (!formData.mobile) {
-            alert("Please enter your mobile number.");
-            return;
-        }
-
-        if (!formData.contactMethod) {
-            alert("Please select a preferred contact method.");
-            return;
-        }
-
-        // --------------------------------------------------
-        // Validate selected dates
-        // --------------------------------------------------
-
-        if (!selectedDates.length) {
-            alert("Please select at least one date.");
-            return;
-        }
-
-        if (selectedDates.length > 3) {
-            alert("You can select a maximum of 3 dates.");
-            return;
-        }
-
-        // --------------------------------------------------
-        // Build all selected date + time combinations
-        // --------------------------------------------------
-
-        const bookingDates = selectedDates.map((date) => {
-            const slot = selectedSlots[date];
-
-            return {
-                date,
-                startTime: slot?.startTime || "",
-                endTime: slot?.endTime || "",
-            };
-        });
-
-        // --------------------------------------------------
-        // Validate every selected date
-        // --------------------------------------------------
-
-        for (const booking of bookingDates) {
-            if (!booking.startTime) {
-                alert(
-                    `Please select a start time for ${booking.date}.`
-                );
+        try {
+            if (!formData.fullName.trim()) {
+                alert("Please enter your full name.");
                 return;
             }
 
-            if (!booking.endTime) {
-                alert(
-                    `Please select an end time for ${booking.date}.`
-                );
+            if (!formData.email.trim()) {
+                alert("Please enter your email.");
                 return;
             }
 
-            const startMinutes = convertTimeToMinutes(
-                booking.startTime
-            );
-
-            const endMinutes = convertTimeToMinutes(
-                booking.endTime
-            );
-
-            if (startMinutes < 0 || endMinutes < 0) {
-                alert(
-                    `Please select a valid time for ${booking.date}.`
-                );
+            if (!formData.mobile) {
+                alert("Please enter your mobile number.");
                 return;
             }
 
-            if (endMinutes <= startMinutes) {
-                alert(
-                    `End time must be later than start time for ${booking.date}.`
-                );
+            if (!formData.contactMethod) {
+                alert("Please select a preferred contact method.");
                 return;
             }
-        }
 
-        // --------------------------------------------------
-        // Check conflicts for all selected dates
-        // --------------------------------------------------
+            // --------------------------------------------------
+            // Validate selected dates
+            // --------------------------------------------------
 
-        if (!requestAnyway) {
+            if (!selectedDates.length) {
+                alert("Please select at least one date.");
+                return;
+            }
+
+            if (selectedDates.length > 3) {
+                alert("You can select a maximum of 3 dates.");
+                return;
+            }
+
+            // --------------------------------------------------
+            // Build all selected date + time combinations
+            // --------------------------------------------------
+
+            const bookingDates = selectedDates.map((date) => {
+                const slot = selectedSlots[date];
+
+                return {
+                    date,
+                    startTime: slot?.startTime || "",
+                    endTime: slot?.endTime || "",
+                };
+            });
+
+            // --------------------------------------------------
+            // Validate every selected date
+            // --------------------------------------------------
+
             for (const booking of bookingDates) {
-                const bookingsForDate =
-                    availabilityByDate[booking.date] || [];
+                if (!booking.startTime) {
+                    alert(
+                        `Please select a start time for ${booking.date}.`
+                    );
+                    return;
+                }
+
+                if (!booking.endTime) {
+                    alert(
+                        `Please select an end time for ${booking.date}.`
+                    );
+                    return;
+                }
 
                 const startMinutes = convertTimeToMinutes(
                     booking.startTime
@@ -397,133 +365,165 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                     booking.endTime
                 );
 
-                const hasConflict = bookingsForDate.some(
-                    (existingBooking) => {
-                        const existingStart =
-                            convertTimeToMinutes(
-                                existingBooking.startTime
-                            );
-
-                        const existingEnd =
-                            convertTimeToMinutes(
-                                existingBooking.endTime
-                            );
-
-                        return (
-                            startMinutes < existingEnd &&
-                            endMinutes > existingStart
-                        );
-                    }
-                );
-
-                if (hasConflict) {
+                if (startMinutes < 0 || endMinutes < 0) {
                     alert(
-                        `The selected time on ${booking.date} is already reserved. Please select another time or choose Request Anyway.`
+                        `Please select a valid time for ${booking.date}.`
+                    );
+                    return;
+                }
+
+                if (endMinutes <= startMinutes) {
+                    alert(
+                        `End time must be later than start time for ${booking.date}.`
                     );
                     return;
                 }
             }
-        }
 
-        // --------------------------------------------------
-        // Submit
-        // --------------------------------------------------
+            // --------------------------------------------------
+            // Check conflicts for all selected dates
+            // --------------------------------------------------
 
-        setIsSubmitting(true);
+            if (!requestAnyway) {
+                for (const booking of bookingDates) {
+                    const bookingsForDate =
+                        availabilityByDate[booking.date] || [];
 
-        const payload = {
-            fullName: formData.fullName,
-            email: formData.email,
-            countryCode: formData.countryCode,
-            mobile: formData.mobile,
-            department: formData.department,
-            contactMethod: formData.contactMethod,
-            purpose: formData.purpose,
-            concerns: formData.concerns,
+                    const startMinutes = convertTimeToMinutes(
+                        booking.startTime
+                    );
 
-            // ALL selected dates and times
-            bookings: bookingDates,
+                    const endMinutes = convertTimeToMinutes(
+                        booking.endTime
+                    );
 
-            requestAnyway,
-        };
+                    const hasConflict = bookingsForDate.some(
+                        (existingBooking) => {
+                            const existingStart =
+                                convertTimeToMinutes(
+                                    existingBooking.startTime
+                                );
 
-        console.log("Booking payload:", payload);
+                            const existingEnd =
+                                convertTimeToMinutes(
+                                    existingBooking.endTime
+                                );
 
-        const response = await fetch(
-            `${API_BASE_URL}/scanner/bookings`,
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(payload),
+                            return (
+                                startMinutes < existingEnd &&
+                                endMinutes > existingStart
+                            );
+                        }
+                    );
+
+                    if (hasConflict) {
+                        alert(
+                            `The selected time on ${booking.date} is already reserved. Please select another time or choose Request Anyway.`
+                        );
+                        return;
+                    }
+                }
             }
-        );
 
-        const result = await response.json();
+            // --------------------------------------------------
+            // Submit
+            // --------------------------------------------------
 
-        console.log(
-            "Booking API status:",
-            response.status
-        );
+            setIsSubmitting(true);
 
-        console.log(
-            "Booking API response:",
-            result
-        );
+            const payload = {
+                fullName: formData.fullName,
+                email: formData.email,
+                countryCode: formData.countryCode,
+                mobile: formData.mobile,
+                department: formData.department,
+                contactMethod: formData.contactMethod,
+                purpose: formData.purpose,
+                concerns: formData.concerns,
 
-        if (!response.ok) {
-            alert(
-                result.message ||
+                // ALL selected dates and times
+                bookings: bookingDates,
+
+                requestAnyway,
+            };
+
+            console.log("Booking payload:", payload);
+
+            const response = await fetch(
+                `${API_BASE_URL}/scanner/bookings`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                }
+            );
+
+            const result = await response.json();
+
+            console.log(
+                "Booking API status:",
+                response.status
+            );
+
+            console.log(
+                "Booking API response:",
+                result
+            );
+
+            if (!response.ok) {
+                alert(
+                    result.message ||
                     result.error ||
                     "Failed to submit scanner request."
+                );
+                return;
+            }
+
+            alert(
+                `Scanner request submitted successfully.\n\nBooking ID: ${result.data.bookingId}`
             );
-            return;
+
+            // --------------------------------------------------
+            // Reset form
+            // --------------------------------------------------
+
+            setFormData({
+                fullName: "",
+                email: "",
+                countryCode: "+91",
+                mobile: "",
+                department: "",
+                contactMethod: "",
+                date: "",
+                startTime: "",
+                endTime: "",
+                purpose: "",
+                concerns: "",
+            });
+
+            setSelectedDates([]);
+            setSelectedSlots({});
+            setAvailability([]);
+            setAvailabilityByDate({});
+            setSlotConflict(null);
+            setRequestAnyway(false);
+
+            onClose();
+        } catch (error) {
+            console.error(
+                "Scanner booking error:",
+                error
+            );
+
+            alert(
+                "Unable to submit scanner request. Please try again."
+            );
+        } finally {
+            setIsSubmitting(false);
         }
-
-        alert(
-            `Scanner request submitted successfully.\n\nBooking ID: ${result.data.bookingId}`
-        );
-
-        // --------------------------------------------------
-        // Reset form
-        // --------------------------------------------------
-
-        setFormData({
-            fullName: "",
-            email: "",
-            countryCode: "+91",
-            mobile: "",
-            department: "",
-            contactMethod: "",
-            date: "",
-            startTime: "",
-            endTime: "",
-            purpose: "",
-            concerns: "",
-        });
-
-        setSelectedDates([]);
-        setSelectedSlots({});
-        setAvailability([]);
-        setAvailabilityByDate({});
-        setSlotConflict(null);
-        setRequestAnyway(false);
-
-        onClose();
-    } catch (error) {
-        console.error(
-            "Scanner booking error:",
-            error
-        );
-
-        alert(
-            "Unable to submit scanner request. Please try again."
-        );
-    } finally {
-        setIsSubmitting(false);
-    }
-};
+    };
 
     const getDaysInMonth = (date: Date) => {
         return new Date(
@@ -751,33 +751,34 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                             </div>
 
                             {/* Legend */}
-                            <div className="bg-indigo-50/50 border border-indigo-100 rounded-lg px-3 sm:px-4 py-3 mb-4">
+                            <div className="mb-4 rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-3">
+                                <div className="flex flex-col items-center justify-center gap-2 sm:flex-row sm:gap-6">
 
-                                <div className="flex flex-wrap items-center justify-center gap-x-4 sm:gap-x-6 gap-y-2 text-[12px] sm:text-sm">
-
+                                    {/* Available */}
                                     <div className="flex items-center gap-2">
-                                        <span className="w-2.5 h-2.5 rounded-full bg-green-400 shrink-0" />
-                                        <span className="text-[#0A2D63]">
+                                        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-green-400" />
+                                        <span className="text-xs sm:text-sm text-[#0A2D63]">
                                             Available
                                         </span>
                                     </div>
 
+                                    {/* Reserved */}
                                     <div className="flex items-center gap-2">
-                                        <span className="w-2.5 h-2.5 rounded-full bg-pink-400 shrink-0" />
-                                        <span className="text-[#0A2D63]">
+                                        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-pink-400" />
+                                        <span className="text-xs sm:text-sm text-[#0A2D63]">
                                             Reserved
                                         </span>
                                     </div>
 
+                                    {/* Pending Approval */}
                                     <div className="flex items-center gap-2">
-                                        <span className="w-2.5 h-2.5 rounded-full bg-yellow-300 shrink-0" />
-                                        <span className="text-[#0A2D63]">
+                                        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-300" />
+                                        <span className="text-xs sm:text-sm text-[#0A2D63]">
                                             Pending Approval
                                         </span>
                                     </div>
 
                                 </div>
-
                             </div>
 
                             {/* Calendar */}
@@ -956,7 +957,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
 
                         </div>
 
-                      
+
 
                         {/* =====================================================
     TIME SELECTION FOR EACH SELECTED DATE
@@ -965,7 +966,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                         <div className="mb-6 sm:mb-7">
 
                             <label className="block text-[14px] sm:text-base font-semibold text-[#0A2D63] mb-3">
-                                Select Time for Each Date
+                                Select Time for Each Date  <span className="text-red-500">*</span>
                             </label>
 
                             {selectedDates.length === 0 ? (
@@ -1321,8 +1322,8 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                                                                 });
                                                                             }}
                                                                             className={`rounded-lg px-4 py-2 text-xs sm:text-sm font-semibold transition ${requestAnyway
-                                                                                    ? "bg-green-600 text-white"
-                                                                                    : "bg-orange-500 text-white hover:bg-orange-600"
+                                                                                ? "bg-green-600 text-white"
+                                                                                : "bg-orange-500 text-white hover:bg-orange-600"
                                                                                 }`}
                                                                         >
                                                                             {requestAnyway
@@ -1353,7 +1354,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                         <div className="mb-6 sm:mb-7">
 
                             <label className="block text-[14px] sm:text-base font-semibold text-[#0A2D63] mb-3">
-                                Purpose / Reason
+                                Purpose / Reason  <span className="text-red-500">*</span>
                             </label>
 
                             <select
@@ -1438,7 +1439,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                         <div className="mb-6 sm:mb-7">
 
                             <label className="block text-[14px] sm:text-base font-semibold text-[#0A2D63] mb-3">
-                                Full Name
+                                Full Name <span className="text-red-500">*</span>
                             </label>
 
                             <input
@@ -1456,7 +1457,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                         <div className="mb-6 sm:mb-7">
 
                             <label className="block text-[14px] sm:text-base font-semibold text-[#0A2D63] mb-3">
-                                Email Address
+                                Email Address <span className="text-red-500">*</span>
                             </label>
 
                             <input
@@ -1474,7 +1475,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                         <div className="mb-6 sm:mb-7">
 
                             <label className="block text-[14px] sm:text-base font-semibold text-[#0A2D63] mb-3">
-                                Mobile Number
+                                Mobile Number <span className="text-red-500">*</span>
                             </label>
 
                             <div className="grid grid-cols-[85px_1fr] sm:grid-cols-[110px_1fr] gap-2 sm:gap-3">
@@ -1485,17 +1486,9 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                     onChange={handleChange}
                                     className="w-full border border-indigo-200 rounded-lg px-2 sm:px-4 py-3.5 bg-white text-[14px] sm:text-base text-gray-900 outline-none focus:border-black"
                                 >
-                                    <option value="+91">
-                                        +91
-                                    </option>
-
-                                    <option value="+1">
-                                        +1
-                                    </option>
-
-                                    <option value="+44">
-                                        +44
-                                    </option>
+                                    <option value="+91">+91</option>
+                                    <option value="+1">+1</option>
+                                    <option value="+44">+44</option>
                                 </select>
 
                                 <input
@@ -1534,7 +1527,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                         <div>
 
                             <label className="block text-[14px] sm:text-base font-semibold text-[#0A2D63] mb-3">
-                                Preferred Contact Method
+                                Preferred Contact Method <span className="text-red-500">*</span>
                             </label>
 
                             <select
@@ -1547,17 +1540,9 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                     Select contact method
                                 </option>
 
-                                <option value="Email">
-                                    Email
-                                </option>
-
-                                <option value="Phone">
-                                    Phone
-                                </option>
-
-                                <option value="Both">
-                                    Both
-                                </option>
+                                <option value="Email">Email</option>
+                                <option value="Phone">Phone</option>
+                                <option value="Both">Both</option>
                             </select>
 
                         </div>
