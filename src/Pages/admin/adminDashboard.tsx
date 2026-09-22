@@ -56,9 +56,13 @@ const ScannerAdminDashboard = () => {
     const [adminComment, setAdminComment] = useState("");
     const [selectedBookingSlots, setSelectedBookingSlots] = useState<
         BookingSlot[]
-    >([]); const [actionLoading, setActionLoading] = useState(false);
+    >([]);
+    const [actionLoading, setActionLoading] = useState<
+        "approve" | "reject" | null
+    >(null);
     const [actionError, setActionError] = useState("");
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [showAllBookings, setShowAllBookings] = useState(false);
 
     // --------------------------------------------------
     // Fetch bookings
@@ -165,6 +169,13 @@ const ScannerAdminDashboard = () => {
             return matchesFilter && matchesSearch;
         });
     }, [bookings, activeFilter, searchTerm]);
+    const displayedBookings = useMemo(() => {
+        if (showAllBookings) {
+            return filteredBookings;
+        }
+
+        return filteredBookings.slice(0, 10);
+    }, [filteredBookings, showAllBookings]);
 
     // --------------------------------------------------
     // Status
@@ -269,7 +280,7 @@ const ScannerAdminDashboard = () => {
         if (!selectedBooking) return;
 
         try {
-            setActionLoading(true);
+            setActionLoading(action);
             setActionError("");
 
             const token = localStorage.getItem("scannerAdminToken");
@@ -370,7 +381,7 @@ const ScannerAdminDashboard = () => {
             );
 
         } finally {
-            setActionLoading(false);
+            setActionLoading(null);
         }
     };
 
@@ -722,7 +733,8 @@ const ScannerAdminDashboard = () => {
 
                         {/* Table */}
 
-                        <div className="w-full overflow-x-auto">
+                        <div className="w-full">
+
 
                             <table className="w-full min-w-[900px]">
 
@@ -788,7 +800,7 @@ const ScannerAdminDashboard = () => {
 
                                     ) : (
 
-                                        filteredBookings.map((booking) => (
+                                        displayedBookings.map((booking) => (
 
                                             <tr
                                                 key={booking._id}
@@ -895,6 +907,32 @@ const ScannerAdminDashboard = () => {
                             </table>
 
                         </div>
+                        {/* View All / Show Less */}
+                        {filteredBookings.length > 10 && (
+                            <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-5">
+                                <p className="text-xs text-gray-500 sm:text-sm">
+                                    Showing{" "}
+                                    <span className="font-semibold text-gray-700">
+                                        {showAllBookings
+                                            ? filteredBookings.length
+                                            : Math.min(10, filteredBookings.length)}
+                                    </span>{" "}
+                                    of{" "}
+                                    <span className="font-semibold text-gray-700">
+                                        {filteredBookings.length}
+                                    </span>{" "}
+                                    requests
+                                </p>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAllBookings((prev) => !prev)}
+                                    className="rounded-lg border border-[#0A2D63] bg-white px-4 py-2 text-xs font-semibold text-[#0A2D63] transition hover:bg-blue-50 sm:text-sm"
+                                >
+                                    {showAllBookings ? "Show Less" : "View All"}
+                                </button>
+                            </div>
+                        )}
 
                     </div>
 
@@ -1119,7 +1157,7 @@ const ScannerAdminDashboard = () => {
                                                         </div>
                                                     </div>
 
-                                                   
+
                                                     {/* Validation */}
                                                     {slot.startTime &&
                                                         slot.endTime &&
@@ -1240,12 +1278,12 @@ const ScannerAdminDashboard = () => {
                                                         "reject"
                                                     )
                                                 }
-                                                disabled={actionLoading}
+                                                disabled={actionLoading !== null}
                                                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-5 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                                             >
                                                 <XCircle size={17} />
 
-                                                {actionLoading
+                                                {actionLoading === "reject"
                                                     ? "Processing..."
                                                     : "Reject"}
                                             </button>
@@ -1256,12 +1294,12 @@ const ScannerAdminDashboard = () => {
                                                         "approve"
                                                     )
                                                 }
-                                                disabled={actionLoading}
+                                                disabled={actionLoading !== null}
                                                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                                             >
                                                 <CheckCircle2 size={17} />
 
-                                                {actionLoading
+                                                {actionLoading === "approve"
                                                     ? "Processing..."
                                                     : "Approve"}
                                             </button>
@@ -1274,7 +1312,7 @@ const ScannerAdminDashboard = () => {
                                             setAdminComment("");
                                             setActionError("");
                                         }}
-                                        disabled={actionLoading}
+                                        disabled={actionLoading !== null}
                                         className="w-full rounded-lg bg-[#0A2D63] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#08234e] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                                     >
                                         Close
