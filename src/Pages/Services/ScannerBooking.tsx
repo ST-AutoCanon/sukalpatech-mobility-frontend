@@ -752,12 +752,12 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
 
                             {/* Legend */}
                             <div className="mb-4 rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-3">
-                                <div className="flex flex-col items-center justify-center gap-2 sm:flex-row sm:gap-6">
+                                <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-center sm:gap-6">
 
                                     {/* Available */}
                                     <div className="flex items-center gap-2">
                                         <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-green-400" />
-                                        <span className="text-xs sm:text-sm text-[#0A2D63]">
+                                        <span className="text-xs text-[#0A2D63] sm:text-sm">
                                             Available
                                         </span>
                                     </div>
@@ -765,7 +765,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                     {/* Reserved */}
                                     <div className="flex items-center gap-2">
                                         <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-pink-400" />
-                                        <span className="text-xs sm:text-sm text-[#0A2D63]">
+                                        <span className="text-xs text-[#0A2D63] sm:text-sm">
                                             Reserved
                                         </span>
                                     </div>
@@ -773,7 +773,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                     {/* Pending Approval */}
                                     <div className="flex items-center gap-2">
                                         <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-300" />
-                                        <span className="text-xs sm:text-sm text-[#0A2D63]">
+                                        <span className="text-xs text-[#0A2D63] sm:text-sm">
                                             Pending Approval
                                         </span>
                                     </div>
