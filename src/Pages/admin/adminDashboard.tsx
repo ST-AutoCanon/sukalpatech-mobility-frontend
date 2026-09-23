@@ -733,7 +733,7 @@ const ScannerAdminDashboard = () => {
 
                         {/* Table */}
 
-                        <div className="w-full">
+                        <div className="w-full overflow-x-auto">
 
 
                             <table className="w-full min-w-[900px]">
