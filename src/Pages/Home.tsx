@@ -122,23 +122,107 @@ const Home = () => {
                             {/* Buttons */}
                             <div className="flex flex-row gap-3 mt-8 w-full">
 
-                                <button
-                                    onClick={() => {
-                                        navigate("/enquiry");
-                                        window.scrollTo(0, 0);
-                                    }}
-                                    className="w-full sm:w-auto bg-[#0A2D63] text-white px-8 py-3 rounded-full hover:bg-[#7BAF2A] transition"
-                                >
-                                    Request Services
-                                </button>
+                                {/* Buttons */}
+                                <div className="
+    mt-8
+    grid
+    grid-cols-2
+    gap-3
+    w-full
+    -translate-y-3
+    sm:-translate-y-2
+    lg:translate-y-0
+">
 
-                                <button
-                                    onClick={scrollToServices}
-                                    className="w-full sm:w-auto inline-flex justify-center items-center gap-2 bg-[#7BAF2A] text-white px-8 py-3 rounded-full hover:bg-[#0A2D63] transition"
-                                >
-                                    <span>Explore Services</span>
-                                    <ArrowRight size={18} />
-                                </button>
+                                    {/* Request Services */}
+                                    <button
+                                        onClick={() => {
+                                            navigate("/enquiry");
+                                            window.scrollTo(0, 0);
+                                        }}
+                                        className="
+    inline-flex
+    w-full
+    h-[54px]
+    justify-center
+    items-center
+    bg-[#0A2D63]
+    text-white
+    px-4
+    py-2
+    rounded-full
+    hover:bg-[#7BAF2A]
+    transition
+    text-center
+    leading-tight
+
+    max-lg:px-3
+  "
+                                    >
+                                        <span className="max-lg:max-w-[65px] lg:whitespace-nowrap">
+                                            Request Services
+                                        </span>
+                                        <ArrowRight size={16} className="shrink-0" />
+                                    </button>
+
+                                    {/* Explore Services */}
+                                    <button
+                                        onClick={scrollToServices}
+                                        className="
+    inline-flex
+    w-full
+    h-[54px]
+    justify-center
+    items-center
+    gap-1
+    bg-[#7BAF2A]
+    text-white
+    px-4
+    py-2
+    rounded-full
+    hover:bg-[#0A2D63]
+    transition
+    text-center
+    leading-tight
+
+    max-lg:px-2
+  "
+                                    >
+                                        <span className="max-lg:max-w-[65px] lg:whitespace-nowrap">
+                                            Explore Services
+                                        </span>
+
+                                        <ArrowRight size={16} className="shrink-0" />
+                                    </button>
+                                    {/* Request Scanner Service */}
+                                    <button
+                                        onClick={() => {
+                                            navigate("/services/scanner-availability");
+                                            window.scrollTo(0, 0);
+                                        }}
+                                        className="
+            col-span-2
+            justify-self-center
+            inline-flex
+            items-center
+            justify-center
+            gap-2
+            bg-[#0A2D63]
+            text-white
+            px-7
+            py-3
+            rounded-full
+            hover:bg-[#7BAF2A]
+            transition
+            whitespace-nowrap
+        "
+                                    >
+                                        Request Scanner Service
+                                        <ArrowRight size={18} />
+                                    </button>
+
+                                </div>
+
 
                             </div>
 
