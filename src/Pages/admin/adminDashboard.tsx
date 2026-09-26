@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+
 import {
     CalendarDays,
     CheckCircle2,
@@ -36,6 +37,15 @@ interface Booking {
     reviewedAt: string | null;
 }
 
+interface BlockedSlot {
+    _id: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    reason: string;
+    note: string;
+}
+
 const ScannerAdminDashboard = () => {
     const [activeFilter, setActiveFilter] = useState<
         "all" | BookingStatus
@@ -63,7 +73,20 @@ const ScannerAdminDashboard = () => {
     const [actionError, setActionError] = useState("");
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [showAllBookings, setShowAllBookings] = useState(false);
+    const [blockedSlots, setBlockedSlots] = useState<BlockedSlot[]>([]);
 
+    const [blockedDates, setBlockedDates] = useState<string[]>([]);
+    const [selectedDate, setSelectedDate] = useState("");
+    const [blockedStartTime, setBlockedStartTime] = useState("");
+    const [blockedEndTime, setBlockedEndTime] = useState("");
+    const [blockedReason, setBlockedReason] = useState("Maintenance");
+    const [blockedNote, setBlockedNote] = useState("");
+
+    const [blockLoading, setBlockLoading] = useState(false);
+    const [blockError, setBlockError] = useState("");
+    const [activeSection, setActiveSection] = useState<"bookings" | "blocked">(
+        "bookings"
+    );
     // --------------------------------------------------
     // Fetch bookings
     // --------------------------------------------------
@@ -120,8 +143,193 @@ const ScannerAdminDashboard = () => {
         }
     };
 
+    const fetchBlockedSlots = async () => {
+        try {
+            const token = localStorage.getItem("scannerAdminToken");
+
+            if (!token) {
+                window.location.href = "/scanner-admin/login";
+                return;
+            }
+
+            const response = await fetch(
+                `${API_BASE_URL}/scanner-admin/blocked-slots`,
+                {
+                    method: "GET",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            const result = await response.json();
+
+            if (response.status === 401) {
+                localStorage.removeItem("scannerAdminToken");
+                localStorage.removeItem("scannerAdmin");
+
+                window.location.href = "/scanner-admin/login";
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error(
+                    result.message || "Failed to fetch blocked dates."
+                );
+            }
+
+            setBlockedSlots(result.data || []);
+        } catch (error) {
+            console.error("Fetch blocked slots error:", error);
+
+            setBlockError(
+                error instanceof Error
+                    ? error.message
+                    : "Failed to load blocked dates."
+            );
+        }
+    };
+    const handleBlockSlot = async () => {
+        try {
+            setBlockLoading(true);
+            setBlockError("");
+
+            if (blockedDates.length === 0) {
+                setBlockError("Please select at least one date.");
+                return;
+            }
+
+            if (blockedStartTime && !blockedEndTime) {
+                setBlockError("Please select an end time.");
+                return;
+            }
+
+            if (!blockedStartTime && blockedEndTime) {
+                setBlockError("Please select a start time.");
+                return;
+            }
+
+            if (
+                blockedStartTime &&
+                blockedEndTime &&
+                convertTimeToMinutes(blockedEndTime) <=
+                convertTimeToMinutes(blockedStartTime)
+            ) {
+                setBlockError("End time must be later than start time.");
+                return;
+            }
+
+            const token = localStorage.getItem("scannerAdminToken");
+
+            if (!token) {
+                window.location.href = "/scanner-admin/login";
+                return;
+            }
+            console.log("blockedDates before API:", blockedDates);
+
+            const response = await fetch(
+                `${API_BASE_URL}/scanner-admin/blocked-slots`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        dates: blockedDates,
+                        startTime: blockedStartTime,
+                        endTime: blockedEndTime,
+                        reason: blockedReason,
+                        note: blockedNote.trim(),
+                    }),
+                }
+            );
+
+            const result = await response.json();
+
+            if (response.status === 401) {
+                localStorage.removeItem("scannerAdminToken");
+                localStorage.removeItem("scannerAdmin");
+                window.location.href = "/scanner-admin/login";
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error(
+                    result.message || "Failed to block dates."
+                );
+            }
+
+            // Add all newly created blocked slots to the existing list
+            setBlockedSlots((prev) => [
+                ...prev,
+                ...(result.data || []),
+            ]);
+
+            // Reset form
+            setBlockedDates([]);
+            setBlockedStartTime("");
+            setBlockedEndTime("");
+            setBlockedReason("Maintenance");
+            setBlockedNote("");
+        } catch (error) {
+            console.error("Block slots error:", error);
+
+            setBlockError(
+                error instanceof Error
+                    ? error.message
+                    : "Failed to block dates."
+            );
+        } finally {
+            setBlockLoading(false);
+        }
+    };
+
+    const handleUnblockSlot = async (id: string) => {
+        try {
+            const token = localStorage.getItem("scannerAdminToken");
+
+            if (!token) {
+                window.location.href = "/scanner-admin/login";
+                return;
+            }
+
+            const response = await fetch(
+                `${API_BASE_URL}/scanner-admin/blocked-slots/${id}`,
+                {
+                    method: "DELETE",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    result.message || "Failed to unblock date."
+                );
+            }
+
+            setBlockedSlots((prev) =>
+                prev.filter((slot) => slot._id !== id)
+            );
+
+        } catch (error) {
+            console.error("Unblock slot error:", error);
+
+            setBlockError(
+                error instanceof Error
+                    ? error.message
+                    : "Failed to unblock date."
+            );
+        }
+    };
+
     useEffect(() => {
         fetchBookings();
+        fetchBlockedSlots();
     }, []);
 
     // --------------------------------------------------
@@ -634,9 +842,13 @@ const ScannerAdminDashboard = () => {
                         Bookings
                     -------------------------------------------------- */}
 
+                    {/* --------------------------------------------------
+    Bookings / Scanner Availability
+-------------------------------------------------- */}
+
                     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
 
-                        {/* Table Header */}
+                        {/* Header / Tabs */}
 
                         <div className="border-b border-gray-200 p-4 sm:p-5">
 
@@ -645,293 +857,886 @@ const ScannerAdminDashboard = () => {
                                 <div className="min-w-0">
 
                                     <h3 className="text-base font-bold text-gray-800 sm:text-lg">
-                                        Booking Requests
+                                        {activeSection === "bookings"
+                                            ? "Booking Requests"
+                                            : "Scanner Availability"}
                                     </h3>
 
                                     <p className="mt-1 text-xs text-gray-500">
-                                        Review and manage scanner reservations
+                                        {activeSection === "bookings"
+                                            ? "Review and manage scanner reservations"
+                                            : "Block dates or time slots when the scanner is unavailable."}
                                     </p>
 
                                 </div>
 
-                                {/* Search */}
+                                {/* Search - only for bookings */}
 
-                                <div className="relative w-full xl:w-64">
+                                {activeSection === "bookings" && (
+                                    <div className="relative w-full xl:w-64">
 
-                                    <Search
-                                        size={17}
-                                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                                    />
+                                        <Search
+                                            size={17}
+                                            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                                        />
 
-                                    <input
-                                        type="text"
-                                        placeholder="Search Booking/Applicant name"
-                                        value={searchTerm}
-                                        onChange={(e) =>
-                                            setSearchTerm(e.target.value)
-                                        }
-                                        className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-[#0A2D63] focus:ring-2 focus:ring-blue-100"
-                                    />
+                                        <input
+                                            type="text"
+                                            placeholder="Search Booking/Applicant name"
+                                            value={searchTerm}
+                                            onChange={(e) =>
+                                                setSearchTerm(e.target.value)
+                                            }
+                                            className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-[#0A2D63] focus:ring-2 focus:ring-blue-100"
+                                        />
+
+                                    </div>
+                                )}
+
+                            </div>
+
+                            {/* Tabs */}
+
+                            <div className="mt-4 flex gap-2 overflow-x-auto pb-1 sm:mt-5 sm:flex-wrap sm:overflow-visible sm:pb-0">
+
+                                {/* All */}
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setActiveSection("bookings");
+                                        setActiveFilter("all");
+                                    }}
+                                    className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition sm:px-4 sm:text-sm ${activeSection === "bookings" &&
+                                        activeFilter === "all"
+                                        ? "bg-[#0A2D63] text-white"
+                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                        }`}
+                                >
+                                    All
+                                </button>
+
+                                {/* Pending */}
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setActiveSection("bookings");
+                                        setActiveFilter("pending");
+                                    }}
+                                    className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition sm:px-4 sm:text-sm ${activeSection === "bookings" &&
+                                        activeFilter === "pending"
+                                        ? "bg-[#0A2D63] text-white"
+                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                        }`}
+                                >
+                                    Pending
+                                </button>
+
+                                {/* Approved */}
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setActiveSection("bookings");
+                                        setActiveFilter("approved");
+                                    }}
+                                    className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition sm:px-4 sm:text-sm ${activeSection === "bookings" &&
+                                        activeFilter === "approved"
+                                        ? "bg-[#0A2D63] text-white"
+                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                        }`}
+                                >
+                                    Approved
+                                </button>
+
+                                {/* Rejected */}
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setActiveSection("bookings");
+                                        setActiveFilter("rejected");
+                                    }}
+                                    className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition sm:px-4 sm:text-sm ${activeSection === "bookings" &&
+                                        activeFilter === "rejected"
+                                        ? "bg-[#0A2D63] text-white"
+                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                        }`}
+                                >
+                                    Rejected
+                                </button>
+
+                                {/* Block Date */}
+
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveSection("blocked")}
+                                    className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition sm:px-4 sm:text-sm ${activeSection === "blocked"
+                                        ? "bg-[#0A2D63] text-white"
+                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                        }`}
+                                >
+                                    Block Your Unavailable Date
+                                </button>
+
+                            </div>
+
+                        </div>
+
+
+                        {/* ==================================================
+        BOOKING REQUESTS
+    ================================================== */}
+
+                        {activeSection === "bookings" && (
+                            <>
+
+                                {/* Error */}
+
+                                {error && (
+                                    <div className="m-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 sm:m-5">
+                                        {error}
+                                    </div>
+                                )}
+
+                                {/* Booking Table */}
+
+                                <div className="w-full overflow-x-auto">
+
+                                    <table className="w-full min-w-[900px]">
+
+                                        <thead>
+
+                                            <tr className="border-b border-gray-200 bg-gray-50 text-left">
+
+                                                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-5">
+                                                    Booking
+                                                </th>
+
+                                                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-5">
+                                                    Applicant
+                                                </th>
+
+                                                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-5">
+                                                    Date
+                                                </th>
+
+                                                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-5">
+                                                    Time
+                                                </th>
+
+                                                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-5">
+                                                    Purpose
+                                                </th>
+
+                                                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-5">
+                                                    Status
+                                                </th>
+
+                                                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-5">
+                                                    Action
+                                                </th>
+
+                                            </tr>
+
+                                        </thead>
+
+                                        <tbody>
+
+                                            {loading ? (
+
+                                                <tr>
+                                                    <td
+                                                        colSpan={7}
+                                                        className="px-5 py-12 text-center text-sm text-gray-500"
+                                                    >
+                                                        Loading bookings...
+                                                    </td>
+                                                </tr>
+
+                                            ) : filteredBookings.length === 0 ? (
+
+                                                <tr>
+                                                    <td
+                                                        colSpan={7}
+                                                        className="px-5 py-12 text-center text-sm text-gray-500"
+                                                    >
+                                                        No bookings found.
+                                                    </td>
+                                                </tr>
+
+                                            ) : (
+
+                                                displayedBookings.map((booking) => (
+
+                                                    <tr
+                                                        key={booking._id}
+                                                        className="border-b border-gray-100 transition hover:bg-gray-50"
+                                                    >
+
+                                                        {/* Booking ID */}
+
+                                                        <td className="px-4 py-4 sm:px-5">
+                                                            <p className="text-sm font-semibold text-[#0A2D63]">
+                                                                {booking.bookingId}
+                                                            </p>
+                                                        </td>
+
+                                                        {/* Applicant */}
+
+                                                        <td className="px-4 py-4 sm:px-5">
+                                                            <p className="text-sm font-semibold text-gray-800">
+                                                                {booking.fullName}
+                                                            </p>
+
+                                                            <p className="mt-0.5 max-w-[220px] truncate text-xs text-gray-500">
+                                                                {booking.email}
+                                                            </p>
+                                                        </td>
+
+                                                        {/* Date */}
+
+                                                        <td className="px-4 py-4 text-sm text-gray-600 sm:px-5">
+
+                                                            <div className="space-y-2">
+
+                                                                {(booking.bookings || []).map(
+                                                                    (slot, index) => (
+
+                                                                        <div
+                                                                            key={`${slot.date}-${index}`}
+                                                                        >
+                                                                            {formatDate(slot.date)}
+                                                                        </div>
+
+                                                                    )
+                                                                )}
+
+                                                            </div>
+
+                                                        </td>
+
+                                                        {/* Time */}
+
+                                                        <td className="px-4 py-4 text-sm text-gray-600 sm:px-5">
+
+                                                            <div className="space-y-2">
+
+                                                                {(booking.bookings || []).map(
+                                                                    (slot, index) => (
+
+                                                                        <div
+                                                                            key={`${slot.date}-${index}`}
+                                                                            className="whitespace-nowrap"
+                                                                        >
+                                                                            {slot.startTime} -{" "}
+                                                                            {slot.endTime}
+                                                                        </div>
+
+                                                                    )
+                                                                )}
+
+                                                            </div>
+
+                                                        </td>
+
+                                                        {/* Purpose */}
+
+                                                        <td className="max-w-[220px] px-4 py-4 sm:px-5">
+
+                                                            <p
+                                                                className="truncate text-sm text-gray-600"
+                                                                title={booking.purpose}
+                                                            >
+                                                                {booking.purpose}
+                                                            </p>
+
+                                                        </td>
+
+                                                        {/* Status */}
+
+                                                        <td className="px-4 py-4 sm:px-5">
+
+                                                            <span
+                                                                className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(
+                                                                    booking.status
+                                                                )}`}
+                                                            >
+                                                                {getStatusLabel(
+                                                                    booking.status
+                                                                )}
+                                                            </span>
+
+                                                        </td>
+
+                                                        {/* Action */}
+
+                                                        <td className="px-4 py-4 text-right sm:px-5">
+
+                                                            <button
+                                                                onClick={() => {
+
+                                                                    setSelectedBooking(
+                                                                        booking
+                                                                    );
+
+                                                                    setAdminComment(
+                                                                        booking.adminComment || ""
+                                                                    );
+
+                                                                    setSelectedBookingSlots(
+                                                                        (
+                                                                            booking.bookings ||
+                                                                            []
+                                                                        ).map((slot) => ({
+                                                                            date: slot.date,
+                                                                            startTime:
+                                                                                slot.startTime,
+                                                                            endTime:
+                                                                                slot.endTime,
+                                                                        }))
+                                                                    );
+
+                                                                    setActionError("");
+
+                                                                }}
+                                                                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-[#0A2D63] hover:bg-blue-50 hover:text-[#0A2D63]"
+                                                            >
+                                                                <Eye size={15} />
+                                                                View
+                                                            </button>
+
+                                                        </td>
+
+                                                    </tr>
+
+                                                ))
+
+                                            )}
+
+                                        </tbody>
+
+                                    </table>
+
+                                </div>
+
+                                {/* View All / Show Less */}
+
+                                {filteredBookings.length > 10 && (
+
+                                    <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-5">
+
+                                        <p className="text-xs text-gray-500 sm:text-sm">
+
+                                            Showing{" "}
+
+                                            <span className="font-semibold text-gray-700">
+                                                {showAllBookings
+                                                    ? filteredBookings.length
+                                                    : Math.min(
+                                                        10,
+                                                        filteredBookings.length
+                                                    )}
+                                            </span>{" "}
+
+                                            of{" "}
+
+                                            <span className="font-semibold text-gray-700">
+                                                {filteredBookings.length}
+                                            </span>{" "}
+
+                                            requests
+
+                                        </p>
+
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setShowAllBookings(
+                                                    (prev) => !prev
+                                                )
+                                            }
+                                            className="rounded-lg border border-[#0A2D63] bg-white px-4 py-2 text-xs font-semibold text-[#0A2D63] transition hover:bg-blue-50 sm:text-sm"
+                                        >
+                                            {showAllBookings
+                                                ? "Show Less"
+                                                : "View All"}
+                                        </button>
+
+                                    </div>
+
+                                )}
+
+                            </>
+                        )}
+
+
+                        {/* ==================================================
+        BLOCK DATE UI ONLY
+    ================================================== */}
+
+                        {activeSection === "blocked" && (
+
+                            <div className="p-4 sm:p-5">
+
+                                {/* Header */}
+
+                                <div className="mb-5">
+
+                                    <h3 className="text-base font-bold text-gray-800 sm:text-lg">
+                                        Scanner Availability
+                                    </h3>
+
+                                    <p className="mt-1 text-xs text-gray-500 sm:text-sm">
+                                        Block dates or time slots when the scanner is unavailable.
+                                        Users will not be able to request bookings during these
+                                        periods.
+                                    </p>
+
+                                </div>
+
+
+                                {/* Block Form */}
+
+                                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 sm:p-5">
+
+                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+                                        {/* Date */}
+
+                                        {/* Multiple Unavailable Dates */}
+
+                                        {/* Multiple Unavailable Dates */}
+
+                                        <div className="sm:col-span-2 lg:col-span-2">
+
+                                            <label className="mb-1.5 block text-xs font-medium text-gray-600">
+                                                Unavailable Dates
+                                            </label>
+
+                                            <div className="flex gap-2">
+
+                                                <input
+                                                    type="date"
+                                                    value={selectedDate}
+                                                    onChange={(e) => {
+                                                        setSelectedDate(e.target.value);
+                                                        setBlockError("");
+                                                    }}
+                                                    min={new Date().toISOString().split("T")[0]}
+                                                    className="
+                w-full
+                rounded-lg
+                border
+                border-gray-300
+                bg-white
+                px-3
+                py-2.5
+                text-sm
+                text-gray-700
+                outline-none
+                transition
+                focus:border-[#0A2D63]
+                focus:ring-2
+                focus:ring-blue-100
+            "
+                                                />
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (!selectedDate) {
+                                                            setBlockError("Please select a date.");
+                                                            return;
+                                                        }
+
+                                                        if (blockedDates.includes(selectedDate)) {
+                                                            setBlockError("This date is already selected.");
+                                                            return;
+                                                        }
+
+                                                        setBlockedDates((prev) => [
+                                                            ...prev,
+                                                            selectedDate,
+                                                        ]);
+
+                                                        setSelectedDate("");
+                                                        setBlockError("");
+                                                    }}
+                                                    className="
+                shrink-0
+                rounded-lg
+                bg-[#0A2D63]
+                px-4
+                py-2.5
+                text-sm
+                font-semibold
+                text-white
+                transition
+                hover:bg-[#08234e]
+            "
+                                                >
+                                                    Add
+                                                </button>
+
+                                            </div>
+
+                                            {/* Selected dates */}
+
+                                            {blockedDates.length > 0 && (
+                                                <div className="mt-3 flex flex-wrap gap-2">
+
+                                                    {blockedDates.map((date) => (
+                                                        <div
+                                                            key={date}
+                                                            className="
+                        flex
+                        items-center
+                        gap-2
+                        rounded-full
+                        border
+                        border-[#0A2D63]/20
+                        bg-blue-50
+                        px-3
+                        py-1.5
+                    "
+                                                        >
+                                                            <span className="text-xs font-medium text-[#0A2D63]">
+                                                                {formatDate(date)}
+                                                            </span>
+
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setBlockedDates((prev) =>
+                                                                        prev.filter(
+                                                                            (item) => item !== date
+                                                                        )
+                                                                    );
+                                                                }}
+                                                                className="
+                            text-gray-400
+                            transition
+                            hover:text-red-600
+                        "
+                                                            >
+                                                                <X size={14} />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+
+                                                </div>
+                                            )}
+
+                                        </div>
+
+
+                                        {/* Start Time */}
+
+                                        <div>
+
+                                            <label className="mb-1.5 block text-xs font-medium text-gray-600">
+
+                                                Start Time
+
+                                                <span className="ml-1 text-gray-400">
+                                                    (Optional)
+                                                </span>
+
+                                            </label>
+
+                                            <select
+                                                value={blockedStartTime}
+                                                onChange={(e) => {
+                                                    setBlockedStartTime(
+                                                        e.target.value
+                                                    );
+                                                    setBlockError("");
+                                                }}
+                                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#0A2D63] focus:ring-2 focus:ring-blue-100"
+                                            >
+
+                                                <option value="">
+                                                    Entire Day
+                                                </option>
+
+                                                {timeOptions.map((time) => (
+
+                                                    <option
+                                                        key={time}
+                                                        value={time}
+                                                    >
+                                                        {time}
+                                                    </option>
+
+                                                ))}
+
+                                            </select>
+
+                                        </div>
+
+
+                                        {/* End Time */}
+
+                                        <div>
+
+                                            <label className="mb-1.5 block text-xs font-medium text-gray-600">
+
+                                                End Time
+
+                                                <span className="ml-1 text-gray-400">
+                                                    (Optional)
+                                                </span>
+
+                                            </label>
+
+                                            <select
+                                                value={blockedEndTime}
+                                                onChange={(e) => {
+                                                    setBlockedEndTime(
+                                                        e.target.value
+                                                    );
+                                                    setBlockError("");
+                                                }}
+                                                disabled={!blockedStartTime}
+                                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#0A2D63] focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-gray-100"
+                                            >
+
+                                                <option value="">
+                                                    Select end time
+                                                </option>
+
+                                                {timeOptions.map((time) => (
+
+                                                    <option
+                                                        key={time}
+                                                        value={time}
+                                                    >
+                                                        {time}
+                                                    </option>
+
+                                                ))}
+
+                                            </select>
+
+                                        </div>
+
+
+                                        {/* Reason */}
+
+                                        <div>
+
+                                            <label className="mb-1.5 block text-xs font-medium text-gray-600">
+                                                Reason
+                                            </label>
+
+                                            <select
+                                                value={blockedReason}
+                                                onChange={(e) =>
+                                                    setBlockedReason(
+                                                        e.target.value
+                                                    )
+                                                }
+                                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#0A2D63] focus:ring-2 focus:ring-blue-100"
+                                            >
+
+                                                <option value="Maintenance">
+                                                    Maintenance
+                                                </option>
+
+                                                <option value="Calibration">
+                                                    Calibration
+                                                </option>
+
+                                                <option value="Repair">
+                                                    Repair
+                                                </option>
+
+                                                <option value="Holiday">
+                                                    Holiday
+                                                </option>
+
+                                                <option value="Other">
+                                                    Other
+                                                </option>
+
+                                            </select>
+
+                                        </div>
+
+                                    </div>
+
+
+                                    {/* Note */}
+
+                                    <div className="mt-4">
+
+                                        <label className="mb-1.5 block text-xs font-medium text-gray-600">
+
+                                            Note
+
+                                            <span className="ml-1 text-gray-400">
+                                                (Optional)
+                                            </span>
+
+                                        </label>
+
+                                        <textarea
+                                            value={blockedNote}
+                                            onChange={(e) =>
+                                                setBlockedNote(
+                                                    e.target.value
+                                                )
+                                            }
+                                            placeholder="Add a note about why the scanner is unavailable..."
+                                            rows={3}
+                                            className="w-full resize-y rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#0A2D63] focus:ring-2 focus:ring-blue-100"
+                                        />
+
+                                    </div>
+
+
+                                    {/* Error */}
+
+                                    {blockError && (
+
+                                        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                                            {blockError}
+                                        </div>
+
+                                    )}
+
+
+                                    {/* Block Button */}
+
+                                    <div className="mt-4 flex justify-end">
+
+                                        <button
+                                            type="button"
+                                            onClick={handleBlockSlot}
+                                            disabled={blockLoading}
+                                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#0A2D63] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#08234e] disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+
+                                            <CalendarDays size={17} />
+
+                                            {blockLoading
+                                                ? "Blocking..."
+                                                : "Block selected Dates"}
+
+                                        </button>
+
+                                    </div>
+
+                                </div>
+
+
+                                {/* Existing Blocked Dates */}
+
+                                <div className="mt-6">
+
+                                    <div className="mb-3">
+
+                                        <h4 className="text-sm font-bold text-gray-800">
+                                            Currently Unavailable
+                                        </h4>
+
+                                        <p className="mt-1 text-xs text-gray-500">
+                                            Dates and time slots currently blocked by the scanner admin.
+                                        </p>
+
+                                    </div>
+
+
+                                    {blockedSlots.length === 0 ? (
+
+                                        <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center">
+
+                                            <CalendarDays
+                                                size={28}
+                                                className="mx-auto text-gray-400"
+                                            />
+
+                                            <p className="mt-2 text-sm font-medium text-gray-600">
+                                                No blocked dates
+                                            </p>
+
+                                            <p className="mt-1 text-xs text-gray-400">
+                                                The scanner is currently available for booking.
+                                            </p>
+
+                                        </div>
+
+                                    ) : (
+
+                                        <div className="space-y-3">
+
+                                            {blockedSlots.map((slot) => (
+
+                                                <div
+                                                    key={slot._id}
+                                                    className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
+                                                >
+
+                                                    <div className="min-w-0">
+
+                                                        <div className="flex flex-wrap items-center gap-2">
+
+                                                            <p className="text-sm font-semibold text-[#0A2D63]">
+                                                                {formatDate(slot.date)}
+                                                            </p>
+
+                                                            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
+                                                                {slot.reason}
+                                                            </span>
+
+                                                        </div>
+
+                                                        <p className="mt-1 text-sm text-gray-600">
+                                                            {slot.startTime &&
+                                                                slot.endTime
+                                                                ? `${slot.startTime} - ${slot.endTime}`
+                                                                : "Entire day unavailable"}
+                                                        </p>
+
+                                                        {slot.note && (
+                                                            <p className="mt-1 break-words text-xs text-gray-500">
+                                                                {slot.note}
+                                                            </p>
+                                                        )}
+
+                                                    </div>
+
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            handleUnblockSlot(
+                                                                slot._id
+                                                            )
+                                                        }
+                                                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100"
+                                                    >
+
+                                                        <X size={15} />
+
+                                                        Unblock
+
+                                                    </button>
+
+                                                </div>
+
+                                            ))}
+
+                                        </div>
+
+                                    )}
 
                                 </div>
 
                             </div>
 
-                            {/* Filters */}
-
-                            <div className="mt-4 flex gap-2 overflow-x-auto pb-1 sm:mt-5 sm:flex-wrap sm:overflow-visible sm:pb-0">
-
-                                {[
-                                    {
-                                        value: "all",
-                                        label: "All",
-                                    },
-                                    {
-                                        value: "pending",
-                                        label: "Pending",
-                                    },
-                                    {
-                                        value: "approved",
-                                        label: "Approved",
-                                    },
-                                    {
-                                        value: "rejected",
-                                        label: "Rejected",
-                                    },
-                                ].map((filter) => (
-
-                                    <button
-                                        key={filter.value}
-                                        onClick={() =>
-                                            setActiveFilter(
-                                                filter.value as
-                                                | "all"
-                                                | BookingStatus
-                                            )
-                                        }
-                                        className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition sm:px-4 sm:text-sm ${activeFilter === filter.value
-                                            ? "bg-[#0A2D63] text-white"
-                                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                            }`}
-                                    >
-                                        {filter.label}
-                                    </button>
-
-                                ))}
-
-                            </div>
-
-                        </div>
-
-                        {/* Error */}
-
-                        {error && (
-                            <div className="m-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 sm:m-5">
-                                {error}
-                            </div>
-                        )}
-
-                        {/* Table */}
-
-                        <div className="w-full overflow-x-auto">
-
-
-                            <table className="w-full min-w-[900px]">
-
-                                <thead>
-
-                                    <tr className="border-b border-gray-200 bg-gray-50 text-left">
-
-                                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-5">
-                                            Booking
-                                        </th>
-
-                                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-5">
-                                            Applicant
-                                        </th>
-
-                                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-5">
-                                            Date
-                                        </th>
-
-                                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-5">
-                                            Time
-                                        </th>
-
-                                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-5">
-                                            Purpose
-                                        </th>
-
-                                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-5">
-                                            Status
-                                        </th>
-
-                                        <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-5">
-                                            Action
-                                        </th>
-
-                                    </tr>
-
-                                </thead>
-
-                                <tbody>
-
-                                    {loading ? (
-
-                                        <tr>
-                                            <td
-                                                colSpan={7}
-                                                className="px-5 py-12 text-center text-sm text-gray-500"
-                                            >
-                                                Loading bookings...
-                                            </td>
-                                        </tr>
-
-                                    ) : filteredBookings.length === 0 ? (
-
-                                        <tr>
-                                            <td
-                                                colSpan={7}
-                                                className="px-5 py-12 text-center text-sm text-gray-500"
-                                            >
-                                                No bookings found.
-                                            </td>
-                                        </tr>
-
-                                    ) : (
-
-                                        displayedBookings.map((booking) => (
-
-                                            <tr
-                                                key={booking._id}
-                                                className="border-b border-gray-100 transition hover:bg-gray-50"
-                                            >
-                                                {/* Booking ID */}
-                                                <td className="px-4 py-4 sm:px-5">
-                                                    <p className="text-sm font-semibold text-[#0A2D63]">
-                                                        {booking.bookingId}
-                                                    </p>
-                                                </td>
-
-                                                {/* Applicant */}
-                                                <td className="px-4 py-4 sm:px-5">
-                                                    <p className="text-sm font-semibold text-gray-800">
-                                                        {booking.fullName}
-                                                    </p>
-
-                                                    <p className="mt-0.5 max-w-[220px] truncate text-xs text-gray-500">
-                                                        {booking.email}
-                                                    </p>
-                                                </td>
-
-                                                {/* Date */}
-                                                <td className="px-4 py-4 text-sm text-gray-600 sm:px-5">
-                                                    <div className="space-y-2">
-                                                        {(booking.bookings || []).map((slot, index) => (
-                                                            <div key={`${slot.date}-${index}`}>
-                                                                {formatDate(slot.date)}
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </td>
-
-                                                {/* Time */}
-                                                <td className="px-4 py-4 text-sm text-gray-600 sm:px-5">
-                                                    <div className="space-y-2">
-                                                        {(booking.bookings || []).map((slot, index) => (
-                                                            <div
-                                                                key={`${slot.date}-${index}`}
-                                                                className="whitespace-nowrap"
-                                                            >
-                                                                {slot.startTime} - {slot.endTime}
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </td>
-
-                                                {/* Purpose */}
-                                                <td className="max-w-[220px] px-4 py-4 sm:px-5">
-                                                    <p
-                                                        className="truncate text-sm text-gray-600"
-                                                        title={booking.purpose}
-                                                    >
-                                                        {booking.purpose}
-                                                    </p>
-                                                </td>
-
-                                                {/* Status */}
-                                                <td className="px-4 py-4 sm:px-5">
-                                                    <span
-                                                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(
-                                                            booking.status
-                                                        )}`}
-                                                    >
-                                                        {getStatusLabel(booking.status)}
-                                                    </span>
-                                                </td>
-
-                                                {/* Action */}
-                                                <td className="px-4 py-4 text-right sm:px-5">
-                                                    <button
-                                                        onClick={() => {
-                                                            setSelectedBooking(booking);
-
-                                                            setAdminComment(
-                                                                booking.adminComment || ""
-                                                            );
-
-                                                            setSelectedBookingSlots(
-                                                                (booking.bookings || []).map((slot) => ({
-                                                                    date: slot.date,
-                                                                    startTime: slot.startTime,
-                                                                    endTime: slot.endTime,
-                                                                }))
-                                                            );
-
-                                                            setActionError("");
-                                                        }}
-                                                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-[#0A2D63] hover:bg-blue-50 hover:text-[#0A2D63]"
-                                                    >
-                                                        <Eye size={15} />
-                                                        View
-                                                    </button>
-                                                </td>
-                                            </tr>
-
-                                        ))
-
-                                    )}
-
-                                </tbody>
-
-                            </table>
-
-                        </div>
-                        {/* View All / Show Less */}
-                        {filteredBookings.length > 10 && (
-                            <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-5">
-                                <p className="text-xs text-gray-500 sm:text-sm">
-                                    Showing{" "}
-                                    <span className="font-semibold text-gray-700">
-                                        {showAllBookings
-                                            ? filteredBookings.length
-                                            : Math.min(10, filteredBookings.length)}
-                                    </span>{" "}
-                                    of{" "}
-                                    <span className="font-semibold text-gray-700">
-                                        {filteredBookings.length}
-                                    </span>{" "}
-                                    requests
-                                </p>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setShowAllBookings((prev) => !prev)}
-                                    className="rounded-lg border border-[#0A2D63] bg-white px-4 py-2 text-xs font-semibold text-[#0A2D63] transition hover:bg-blue-50 sm:text-sm"
-                                >
-                                    {showAllBookings ? "Show Less" : "View All"}
-                                </button>
-                            </div>
                         )}
 
                     </div>
@@ -1175,9 +1980,6 @@ const ScannerAdminDashboard = () => {
                                     </div>
                                 </div>
 
-
-
-
                                 {/* Contact Method */}
 
                                 <div className="min-w-0">
@@ -1330,7 +2132,9 @@ const ScannerAdminDashboard = () => {
 
             )}
 
+
         </div>
+
     );
 };
 
