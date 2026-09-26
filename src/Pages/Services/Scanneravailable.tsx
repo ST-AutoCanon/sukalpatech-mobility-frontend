@@ -24,8 +24,9 @@ const ScannerAvailability = () => {
                 ===================================================== */}
                 <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-5 items-start">
 
+
                     {/* ================= LEFT - SCANNER DETAILS ================= */}
-                    <div className="min-w-0">
+                    <div className="min-w-0 order-2 xl:order-1">
 
                         <div className="bg-white rounded-xl border border-gray-200 px-4 sm:px-6 py-4 sm:py-5">
 
@@ -404,7 +405,7 @@ const ScannerAvailability = () => {
                     {/* =====================================================
                         RIGHT SIDE
                     ===================================================== */}
-                    <div className="space-y-5">
+                    <div className="space-y-5 order-1 xl:order-2">
 
                         <div className="bg-gradient-to-br from-[#4B35F5] to-[#4030E8] rounded-xl p-4 sm:p-6 text-white shadow-md">
 

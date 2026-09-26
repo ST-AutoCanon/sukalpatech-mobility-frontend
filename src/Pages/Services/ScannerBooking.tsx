@@ -44,6 +44,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
     const [availabilityByDate, setAvailabilityByDate] = useState<
         Record<string, BookingAvailability[]>
     >({});
+    const [blockedDates, setBlockedDates] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [requestAnyway, setRequestAnyway] = useState(false);
     const [slotConflict, setSlotConflict] = useState<{
@@ -258,11 +259,58 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
             setAvailabilityLoading(false);
         }
     };
+
+    const fetchBlockedDates = async (date: Date) => {
+        try {
+            const year = date.getFullYear();
+            const month = date.getMonth() + 1;
+
+            const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+
+            const lastDay = new Date(year, month, 0).getDate();
+
+            const endDate = `${year}-${String(month).padStart(2, "0")}-${String(
+                lastDay
+            ).padStart(2, "0")}`;
+
+            const response = await fetch(
+                `${API_BASE_URL}/scanner/blocked-slots?startDate=${startDate}&endDate=${endDate}`
+            );
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    result.message || "Failed to fetch blocked dates."
+                );
+            }
+
+            const blockedData = result.data || [];
+            console.log("Blocked slots API response:", blockedData);
+
+            const dates = [
+                ...new Set(
+                    blockedData.map(
+                        (item: { date: string }) => item.date
+                    )
+                ),
+            ];
+
+            setBlockedDates(dates);
+            console.log("Blocked dates received by calendar:", dates);
+        } catch (error) {
+            console.error("Blocked dates error:", error);
+            setBlockedDates([]);
+        }
+    };
     useEffect(() => {
         if (isOpen) {
             fetchMonthAvailability(currentMonth);
+            fetchBlockedDates(currentMonth);
         }
     }, [isOpen, currentMonth]);
+
+
 
     const handleChange = (
         e: React.ChangeEvent<
@@ -764,17 +812,23 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
 
                                     {/* Reserved */}
                                     <div className="flex items-center gap-2">
-                                        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-pink-400" />
+                                        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500" />
                                         <span className="text-xs text-[#0A2D63] sm:text-sm">
                                             Reserved
                                         </span>
                                     </div>
-
                                     {/* Pending Approval */}
                                     <div className="flex items-center gap-2">
                                         <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-300" />
                                         <span className="text-xs text-[#0A2D63] sm:text-sm">
                                             Pending Approval
+                                        </span>
+                                    </div>
+                                    {/* Blocked by Admin */}
+                                    <div className="flex items-center gap-2">
+                                        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" />
+                                        <span className="text-xs text-[#0A2D63] sm:text-sm">
+                                            Unavailable
                                         </span>
                                     </div>
 
@@ -866,26 +920,35 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                             );
 
                                             const isSelected = selectedDates.includes(date);
+                                            const isBlocked = blockedDates.includes(date);
 
 
                                             const dateStatus = getDateStatus(date);
                                             const pastDate = isPastDate(date);
 
                                             const dateStatusClass = pastDate
-                                                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                                                : isSelected
-                                                    ? "bg-[#4334E8] text-white"
-                                                    : dateStatus === "reserved"
-                                                        ? "bg-pink-100 text-pink-700 hover:bg-pink-200"
-                                                        : dateStatus === "pending"
-                                                            ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
-                                                            : "bg-green-100 text-green-700 hover:bg-green-200";
+                                                ? "bg-gray-100 text-gray-500 cursor-not-allowed"
+                                                : isBlocked
+                                                    ? "bg-red-100 text-red-900 cursor-not-allowed"
+                                                    : isSelected
+                                                        ? "bg-[#4334E8] text-white"
+                                                        : dateStatus === "reserved"
+                                                            ? "bg-blue-100 text-blue-900 hover:bg-blue-200"
+                                                            : dateStatus === "pending"
+                                                                ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                                                                : "bg-green-100 text-green-700 hover:bg-green-200";
 
                                             return (
                                                 <button
                                                     key={date}
                                                     type="button"
-                                                    onClick={() => !pastDate && handleDateSelect(date)}
+                                                    onClick={() => {
+                                                        if (pastDate || isBlocked) {
+                                                            return;
+                                                        }
+
+                                                        handleDateSelect(date);
+                                                    }}
                                                     className={`
                 h-9 sm:h-11
                 border-r border-t border-gray-100
@@ -894,7 +957,9 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                 font-medium
                 transition
                 ${dateStatusClass}
-                ${pastDate ? "cursor-not-allowed" : "cursor-pointer"}
+               ${pastDate || isBlocked
+                                                            ? "cursor-not-allowed"
+                                                            : "cursor-pointer"}
             `}
                                                 >
                                                     {day}
