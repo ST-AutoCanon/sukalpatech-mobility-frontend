@@ -190,100 +190,109 @@ const ScannerAdminDashboard = () => {
         }
     };
     const handleBlockSlot = async () => {
-        try {
-            setBlockLoading(true);
-            setBlockError("");
+    try {
+        setBlockLoading(true);
+        setBlockError("");
 
-            if (blockedDates.length === 0) {
-                setBlockError("Please select at least one date.");
-                return;
-            }
+        // Include the currently selected date as well
+        const datesToBlock = selectedDate
+            ? blockedDates.includes(selectedDate)
+                ? blockedDates
+                : [...blockedDates, selectedDate]
+            : blockedDates;
 
-            if (blockedStartTime && !blockedEndTime) {
-                setBlockError("Please select an end time.");
-                return;
-            }
-
-            if (!blockedStartTime && blockedEndTime) {
-                setBlockError("Please select a start time.");
-                return;
-            }
-
-            if (
-                blockedStartTime &&
-                blockedEndTime &&
-                convertTimeToMinutes(blockedEndTime) <=
-                convertTimeToMinutes(blockedStartTime)
-            ) {
-                setBlockError("End time must be later than start time.");
-                return;
-            }
-
-            const token = localStorage.getItem("scannerAdminToken");
-
-            if (!token) {
-                window.location.href = "/scanner-admin/login";
-                return;
-            }
-            console.log("blockedDates before API:", blockedDates);
-
-            const response = await fetch(
-                `${API_BASE_URL}/scanner-admin/blocked-slots`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                        dates: blockedDates,
-                        startTime: blockedStartTime,
-                        endTime: blockedEndTime,
-                        reason: blockedReason,
-                        note: blockedNote.trim(),
-                    }),
-                }
-            );
-
-            const result = await response.json();
-
-            if (response.status === 401) {
-                localStorage.removeItem("scannerAdminToken");
-                localStorage.removeItem("scannerAdmin");
-                window.location.href = "/scanner-admin/login";
-                return;
-            }
-
-            if (!response.ok) {
-                throw new Error(
-                    result.message || "Failed to block dates."
-                );
-            }
-
-            // Add all newly created blocked slots to the existing list
-            setBlockedSlots((prev) => [
-                ...prev,
-                ...(result.data || []),
-            ]);
-
-            // Reset form
-            setBlockedDates([]);
-            setBlockedStartTime("");
-            setBlockedEndTime("");
-            setBlockedReason("Maintenance");
-            setBlockedNote("");
-        } catch (error) {
-            console.error("Block slots error:", error);
-
-            setBlockError(
-                error instanceof Error
-                    ? error.message
-                    : "Failed to block dates."
-            );
-        } finally {
-            setBlockLoading(false);
+        if (datesToBlock.length === 0) {
+            setBlockError("Please select at least one date.");
+            return;
         }
-    };
+
+        if (blockedStartTime && !blockedEndTime) {
+            setBlockError("Please select an end time.");
+            return;
+        }
+
+        if (!blockedStartTime && blockedEndTime) {
+            setBlockError("Please select a start time.");
+            return;
+        }
+
+        if (
+            blockedStartTime &&
+            blockedEndTime &&
+            convertTimeToMinutes(blockedEndTime) <=
+                convertTimeToMinutes(blockedStartTime)
+        ) {
+            setBlockError("End time must be later than start time.");
+            return;
+        }
+
+        const token = localStorage.getItem("scannerAdminToken");
+
+        if (!token) {
+            window.location.href = "/scanner-admin/login";
+            return;
+        }
+
+        console.log("blockedDates before API:", datesToBlock);
+
+        const response = await fetch(
+            `${API_BASE_URL}/scanner-admin/blocked-slots`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    dates: datesToBlock,
+                    startTime: blockedStartTime,
+                    endTime: blockedEndTime,
+                    reason: blockedReason,
+                    note: blockedNote.trim(),
+                }),
+            }
+        );
+
+        const result = await response.json();
+
+        if (response.status === 401) {
+            localStorage.removeItem("scannerAdminToken");
+            localStorage.removeItem("scannerAdmin");
+            window.location.href = "/scanner-admin/login";
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                result.message || "Failed to block dates."
+            );
+        }
+
+        setBlockedSlots((prev) => [
+            ...prev,
+            ...(result.data || []),
+        ]);
+
+        // Reset form
+        setBlockedDates([]);
+        setSelectedDate("");
+        setBlockedStartTime("");
+        setBlockedEndTime("");
+        setBlockedReason("Maintenance");
+        setBlockedNote("");
+
+    } catch (error) {
+        console.error("Block slots error:", error);
+
+        setBlockError(
+            error instanceof Error
+                ? error.message
+                : "Failed to block dates."
+        );
+    } finally {
+        setBlockLoading(false);
+    }
+};
 
     const handleUnblockSlot = async (id: string) => {
         try {
