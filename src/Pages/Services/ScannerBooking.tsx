@@ -44,7 +44,15 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
     const [availabilityByDate, setAvailabilityByDate] = useState<
         Record<string, BookingAvailability[]>
     >({});
-    const [blockedDates, setBlockedDates] = useState<string[]>([]);
+    interface BlockedSlot {
+        date: string;
+        startTime: string;
+        endTime: string;
+    }
+
+    const [blockedSlotsByDate, setBlockedSlotsByDate] = useState<
+        Record<string, BlockedSlot[]>
+    >({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [requestAnyway, setRequestAnyway] = useState(false);
     const [slotConflict, setSlotConflict] = useState<{
@@ -73,6 +81,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
         setSelectedSlots({});
         setAvailability([]);
         setAvailabilityByDate({});
+        setBlockedSlotsByDate({});
         setRequestAnyway(false);
         setIsSubmitting(false);
         setAvailabilityLoading(false);
@@ -281,26 +290,30 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
 
             if (!response.ok) {
                 throw new Error(
-                    result.message || "Failed to fetch blocked dates."
+                    result.message || "Failed to fetch blocked slots."
                 );
             }
 
-            const blockedData = result.data || [];
+            const blockedData: BlockedSlot[] = result.data || [];
+
             console.log("Blocked slots API response:", blockedData);
 
-            const dates = [
-                ...new Set(
-                    blockedData.map(
-                        (item: { date: string }) => item.date
-                    )
-                ),
-            ];
+            const grouped: Record<string, BlockedSlot[]> = {};
 
-            setBlockedDates(dates);
-            console.log("Blocked dates received by calendar:", dates);
+            blockedData.forEach((slot) => {
+                if (!grouped[slot.date]) {
+                    grouped[slot.date] = [];
+                }
+
+                grouped[slot.date].push(slot);
+            });
+
+            setBlockedSlotsByDate(grouped);
+
+            console.log("Blocked slots grouped by date:", grouped);
         } catch (error) {
             console.error("Blocked dates error:", error);
-            setBlockedDates([]);
+            setBlockedSlotsByDate({});
         }
     };
     useEffect(() => {
@@ -432,18 +445,39 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
             // Check conflicts for all selected dates
             // --------------------------------------------------
 
+            // --------------------------------------------------
+            // Check ADMIN BLOCKED slots
+            // --------------------------------------------------
+
+            for (const booking of bookingDates) {
+                const blocked = isSelectedRangeBlocked(
+                    booking.date,
+                    booking.startTime,
+                    booking.endTime
+                );
+
+                if (blocked) {
+                    alert(
+                        `The selected time on ${booking.date} is blocked by the administrator. Please select another time.`
+                    );
+                    return;
+                }
+            }
+
+            // --------------------------------------------------
+            // Check existing booking conflicts
+            // --------------------------------------------------
+
             if (!requestAnyway) {
                 for (const booking of bookingDates) {
                     const bookingsForDate =
                         availabilityByDate[booking.date] || [];
 
-                    const startMinutes = convertTimeToMinutes(
-                        booking.startTime
-                    );
+                    const startMinutes =
+                        convertTimeToMinutes(booking.startTime);
 
-                    const endMinutes = convertTimeToMinutes(
-                        booking.endTime
-                    );
+                    const endMinutes =
+                        convertTimeToMinutes(booking.endTime);
 
                     const hasConflict = bookingsForDate.some(
                         (existingBooking) => {
@@ -686,6 +720,110 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
         );
     };
 
+    const getBlockedStatus = (date: string) => {
+    const blockedSlots = blockedSlotsByDate[date] || [];
+
+    if (blockedSlots.length === 0) {
+        return "none";
+    }
+
+    // If any admin block has no start/end time,
+    // treat it as a full-day block.
+    const hasFullDayBlock = blockedSlots.some(
+        (slot) => !slot.startTime && !slot.endTime
+    );
+
+    if (hasFullDayBlock) {
+        return "full";
+    }
+
+    const workingStart = convertTimeToMinutes("08:00 AM");
+    const workingEnd = convertTimeToMinutes("06:00 PM");
+
+    const sortedSlots = blockedSlots
+        .map((slot) => ({
+            start: convertTimeToMinutes(slot.startTime),
+            end: convertTimeToMinutes(slot.endTime),
+        }))
+        .filter(
+            (slot) =>
+                slot.start >= 0 &&
+                slot.end >= 0 &&
+                slot.end > slot.start
+        )
+        .sort((a, b) => a.start - b.start);
+
+    let coveredUntil = workingStart;
+
+    for (const slot of sortedSlots) {
+        if (slot.start > coveredUntil) {
+            break;
+        }
+
+        if (slot.end > coveredUntil) {
+            coveredUntil = slot.end;
+        }
+
+        if (coveredUntil >= workingEnd) {
+            return "full";
+        }
+    }
+
+    return "partial";
+};
+    const getBlockedSlotsForDate = (date: string) => {
+        return blockedSlotsByDate[date] || [];
+    };
+
+    const isTimeBlocked = (
+        date: string,
+        time: string
+    ) => {
+        const timeMinutes = convertTimeToMinutes(time);
+
+        if (timeMinutes < 0) {
+            return false;
+        }
+
+        const blockedSlots = getBlockedSlotsForDate(date);
+
+        return blockedSlots.some((slot) => {
+            const blockedStart = convertTimeToMinutes(
+                slot.startTime
+            );
+
+            const blockedEnd = convertTimeToMinutes(
+                slot.endTime
+            );
+
+            return (
+                timeMinutes >= blockedStart &&
+                timeMinutes < blockedEnd
+            );
+        });
+    };
+
+    const isSelectedRangeBlocked = (
+        date: string,
+        startTime: string,
+        endTime: string
+    ) => {
+        if (!startTime || !endTime) {
+            return false;
+        }
+
+        const blockedSlots = getBlockedSlotsForDate(date);
+
+        return blockedSlots.some((slot) =>
+            isTimeOverlapping(
+                startTime,
+                endTime,
+                slot.startTime,
+                slot.endTime
+            )
+        );
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -821,7 +959,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                     <div className="flex items-center gap-2">
                                         <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-300" />
                                         <span className="text-xs text-[#0A2D63] sm:text-sm">
-                                            Pending Approval
+                                            Pending
                                         </span>
                                     </div>
                                     {/* Blocked by Admin */}
@@ -829,6 +967,12 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                         <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" />
                                         <span className="text-xs text-[#0A2D63] sm:text-sm">
                                             Unavailable
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-orange-500" />
+                                        <span className="text-xs text-[#0A2D63] sm:text-sm">
+                                        Limited
                                         </span>
                                     </div>
 
@@ -920,7 +1064,10 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                             );
 
                                             const isSelected = selectedDates.includes(date);
-                                            const isBlocked = blockedDates.includes(date);
+                                            const blockedStatus = getBlockedStatus(date);
+
+                                            const isFullyBlocked = blockedStatus === "full";
+                                            const isPartiallyBlocked = blockedStatus === "partial";
 
 
                                             const dateStatus = getDateStatus(date);
@@ -928,22 +1075,24 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
 
                                             const dateStatusClass = pastDate
                                                 ? "bg-gray-100 text-gray-500 cursor-not-allowed"
-                                                : isBlocked
+                                                : isFullyBlocked
                                                     ? "bg-red-100 text-red-900 cursor-not-allowed"
                                                     : isSelected
                                                         ? "bg-[#4334E8] text-white"
-                                                        : dateStatus === "reserved"
-                                                            ? "bg-blue-100 text-blue-900 hover:bg-blue-200"
-                                                            : dateStatus === "pending"
-                                                                ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
-                                                                : "bg-green-100 text-green-700 hover:bg-green-200";
+                                                        : isPartiallyBlocked
+                                                            ? "bg-orange-100 text-orange-800 hover:bg-orange-200"
+                                                            : dateStatus === "reserved"
+                                                                ? "bg-blue-100 text-blue-900 hover:bg-blue-200"
+                                                                : dateStatus === "pending"
+                                                                    ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                                                                    : "bg-green-100 text-green-700 hover:bg-green-200";
 
                                             return (
                                                 <button
                                                     key={date}
                                                     type="button"
                                                     onClick={() => {
-                                                        if (pastDate || isBlocked) {
+                                                        if (pastDate || isFullyBlocked) {
                                                             return;
                                                         }
 
@@ -957,7 +1106,7 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                 font-medium
                 transition
                 ${dateStatusClass}
-               ${pastDate || isBlocked
+              ${pastDate || isFullyBlocked
                                                             ? "cursor-not-allowed"
                                                             : "cursor-pointer"}
             `}
@@ -969,56 +1118,64 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
 
                                     </div>
 
+
                                 </div>
 
                             </div>
 
+                           
                             {/* Selected Date */}
-                            {selectedDates.length > 0 && (
-                                <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 p-3 sm:p-4">
+{selectedDates.length > 0 && (
+    <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 p-3 sm:p-4">
 
-                                    <div className="mb-2 flex items-center justify-between">
-                                        <p className="text-sm font-semibold text-[#0A2D63]">
-                                            Selected Dates
-                                        </p>
+        <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold text-[#0A2D63]">
+                Selected Dates
+            </p>
 
-                                        <span className="rounded-full bg-[#4334E8] px-2.5 py-1 text-xs font-semibold text-white">
-                                            {selectedDates.length}/3
-                                        </span>
-                                    </div>
+            <span className="rounded-full bg-[#4334E8] px-2.5 py-1 text-xs font-semibold text-white">
+                {selectedDates.length}/3
+            </span>
+        </div>
 
-                                    <div className="flex flex-wrap gap-2">
-                                        {selectedDates.map((date) => {
-                                            const dateObj = new Date(`${date}T00:00:00`);
+        <div className="flex flex-wrap gap-2">
+            {selectedDates.map((date) => {
+                const dateObj =
+                    new Date(`${date}T00:00:00`);
 
-                                            return (
-                                                <div
-                                                    key={date}
-                                                    className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2"
-                                                >
-                                                    <span className="text-xs sm:text-sm font-semibold text-[#0A2D63]">
-                                                        {dateObj.toLocaleDateString("en-IN", {
-                                                            day: "2-digit",
-                                                            month: "short",
-                                                            year: "numeric",
-                                                            weekday: "short",
-                                                        })}
-                                                    </span>
-
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleDateSelect(date)}
-                                                        className="text-gray-400 hover:text-red-500"
-                                                    >
-                                                        <X size={14} />
-                                                    </button>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-
-                                </div>
+                return (
+                    <div
+                        key={date}
+                        className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2"
+                    >
+                        <span className="text-xs sm:text-sm font-semibold text-[#0A2D63]">
+                            {dateObj.toLocaleDateString(
+                                "en-IN",
+                                {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                    weekday: "short",
+                                }
                             )}
+                        </span>
+
+                        <button
+                            type="button"
+                            onClick={() =>
+                                handleDateSelect(date)
+                            }
+                            className="text-gray-400 hover:text-red-500"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+                );
+            })}
+        </div>
+
+    </div>
+)}
 
                         </div>
 
@@ -1056,6 +1213,8 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
 
                                         const bookingsForDate =
                                             availabilityByDate[date] || [];
+                                        const blockedSlotsForDate =
+                                            blockedSlotsByDate[date] || [];
 
                                         const selectedSlot =
                                             selectedSlots[date];
@@ -1092,6 +1251,30 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                             >
 
                                                 {/* Date Header */}
+                                                {blockedSlotsForDate.length > 0 && (
+                                                    <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">
+                                                        <p className="text-xs font-semibold text-orange-800">
+                                                            Some times are unavailable
+                                                        </p>
+
+                                                        <div className="mt-1 space-y-1">
+                                                            {blockedSlotsForDate.map(
+                                                                (slot, index) => (
+                                                                    <p
+                                                                        key={`${slot.date}-${index}`}
+                                                                        className="text-[11px] text-orange-700"
+                                                                    >
+                                                                        Admin blocked:{" "}
+                                                                        <span className="font-semibold">
+                                                                            {slot.startTime} -{" "}
+                                                                            {slot.endTime}
+                                                                        </span>
+                                                                    </p>
+                                                                )
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
                                                 <div className="mb-4 flex items-center gap-2">
 
                                                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#4334E8] text-xs font-bold text-white">
@@ -1163,15 +1346,20 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                                                 Select start time
                                                             </option>
 
-                                                            {timeOptions.map((time) => (
-                                                                <option
-                                                                    key={time}
-                                                                    value={time}
-                                                                >
-                                                                    {time}
-                                                                </option>
-                                                            ))}
+                                                            {timeOptions.map((time) => {
+                                                                const blocked = isTimeBlocked(date, time);
 
+                                                                return (
+                                                                    <option
+                                                                        key={time}
+                                                                        value={time}
+                                                                        disabled={blocked}
+                                                                    >
+                                                                        {time}
+                                                                        {blocked ? " — Unavailable" : ""}
+                                                                    </option>
+                                                                );
+                                                            })}
                                                         </select>
 
                                                     </div>
@@ -1218,14 +1406,20 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                                                 Select end time
                                                             </option>
 
-                                                            {timeOptions.map((time) => (
-                                                                <option
-                                                                    key={time}
-                                                                    value={time}
-                                                                >
-                                                                    {time}
-                                                                </option>
-                                                            ))}
+                                                            {timeOptions.map((time) => {
+                                                                const blocked = isTimeBlocked(date, time);
+
+                                                                return (
+                                                                    <option
+                                                                        key={time}
+                                                                        value={time}
+                                                                        disabled={blocked}
+                                                                    >
+                                                                        {time}
+                                                                        {blocked ? " — Unavailable" : ""}
+                                                                    </option>
+                                                                );
+                                                            })}
 
                                                         </select>
 

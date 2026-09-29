@@ -74,6 +74,15 @@ const ScannerAdminDashboard = () => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [showAllBookings, setShowAllBookings] = useState(false);
     const [blockedSlots, setBlockedSlots] = useState<BlockedSlot[]>([]);
+    const [editingBlockedSlot, setEditingBlockedSlot] =
+    useState<BlockedSlot | null>(null);
+
+const [editDate, setEditDate] = useState("");
+const [editStartTime, setEditStartTime] = useState("");
+const [editEndTime, setEditEndTime] = useState("");
+const [editReason, setEditReason] = useState("Maintenance");
+const [editNote, setEditNote] = useState("");
+const [editLoading, setEditLoading] = useState(false);
 
     const [blockedDates, setBlockedDates] = useState<string[]>([]);
     const [selectedDate, setSelectedDate] = useState("");
@@ -83,6 +92,7 @@ const ScannerAdminDashboard = () => {
     const [blockedNote, setBlockedNote] = useState("");
 
     const [blockLoading, setBlockLoading] = useState(false);
+    const [blockSuccess, setBlockSuccess] = useState("");
     const [blockError, setBlockError] = useState("");
     const [activeSection, setActiveSection] = useState<"bookings" | "blocked">(
         "bookings"
@@ -190,112 +200,125 @@ const ScannerAdminDashboard = () => {
         }
     };
     const handleBlockSlot = async () => {
-    try {
-        setBlockLoading(true);
-        setBlockError("");
+        try {
+            setBlockLoading(true);
+            setBlockError("");
+            setBlockSuccess("");
 
-        // Include the currently selected date as well
-        const datesToBlock = selectedDate
-            ? blockedDates.includes(selectedDate)
-                ? blockedDates
-                : [...blockedDates, selectedDate]
-            : blockedDates;
+            // Include the currently selected date as well
+            const datesToBlock = selectedDate
+                ? blockedDates.includes(selectedDate)
+                    ? blockedDates
+                    : [...blockedDates, selectedDate]
+                : blockedDates;
 
-        if (datesToBlock.length === 0) {
-            setBlockError("Please select at least one date.");
-            return;
-        }
-
-        if (blockedStartTime && !blockedEndTime) {
-            setBlockError("Please select an end time.");
-            return;
-        }
-
-        if (!blockedStartTime && blockedEndTime) {
-            setBlockError("Please select a start time.");
-            return;
-        }
-
-        if (
-            blockedStartTime &&
-            blockedEndTime &&
-            convertTimeToMinutes(blockedEndTime) <=
-                convertTimeToMinutes(blockedStartTime)
-        ) {
-            setBlockError("End time must be later than start time.");
-            return;
-        }
-
-        const token = localStorage.getItem("scannerAdminToken");
-
-        if (!token) {
-            window.location.href = "/scanner-admin/login";
-            return;
-        }
-
-        console.log("blockedDates before API:", datesToBlock);
-
-        const response = await fetch(
-            `${API_BASE_URL}/scanner-admin/blocked-slots`,
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                    dates: datesToBlock,
-                    startTime: blockedStartTime,
-                    endTime: blockedEndTime,
-                    reason: blockedReason,
-                    note: blockedNote.trim(),
-                }),
+            if (datesToBlock.length === 0) {
+                setBlockError("Please select at least one date.");
+                return;
             }
-        );
 
-        const result = await response.json();
+            if (blockedStartTime && !blockedEndTime) {
+                setBlockError("Please select an end time.");
+                return;
+            }
 
-        if (response.status === 401) {
-            localStorage.removeItem("scannerAdminToken");
-            localStorage.removeItem("scannerAdmin");
-            window.location.href = "/scanner-admin/login";
-            return;
-        }
+            if (!blockedStartTime && blockedEndTime) {
+                setBlockError("Please select a start time.");
+                return;
+            }
 
-        if (!response.ok) {
-            throw new Error(
-                result.message || "Failed to block dates."
+            if (
+                blockedStartTime &&
+                blockedEndTime &&
+                convertTimeToMinutes(blockedEndTime) <=
+                convertTimeToMinutes(blockedStartTime)
+            ) {
+                setBlockError("End time must be later than start time.");
+                return;
+            }
+
+            const token = localStorage.getItem("scannerAdminToken");
+
+            if (!token) {
+                window.location.href = "/scanner-admin/login";
+                return;
+            }
+
+            const response = await fetch(
+                `${API_BASE_URL}/scanner-admin/blocked-slots`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        dates: datesToBlock,
+                        startTime: blockedStartTime,
+                        endTime: blockedEndTime,
+                        reason: blockedReason,
+                        note: blockedNote.trim(),
+                    }),
+                }
             );
+
+            const result = await response.json();
+
+            if (response.status === 401) {
+                localStorage.removeItem("scannerAdminToken");
+                localStorage.removeItem("scannerAdmin");
+                window.location.href = "/scanner-admin/login";
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error(
+                    result.message || "Failed to block dates."
+                );
+            }
+
+            setBlockedSlots((prev) => [
+                ...prev,
+                ...(result.data || []),
+            ]);
+
+            // Show success message
+            setBlockSuccess(
+                datesToBlock.length === 1
+                    ? "Date blocked successfully."
+                    : `${datesToBlock.length} dates blocked successfully.`
+            );
+
+            // Reset form
+            setBlockedDates([]);
+            setSelectedDate("");
+            setBlockedStartTime("");
+            setBlockedEndTime("");
+            setBlockedReason("Maintenance");
+            setBlockedNote("");
+
+            // Automatically hide success message after 4 seconds
+            setTimeout(() => {
+                setBlockSuccess("");
+            }, 4000);
+
+        } catch (error) {
+            console.error("Block slots error:", error);
+
+            setBlockError(
+                error instanceof Error
+                    ? error.message
+                    : "Failed to block dates."
+            );
+        } finally {
+            setBlockLoading(false);
         }
-
-        setBlockedSlots((prev) => [
-            ...prev,
-            ...(result.data || []),
-        ]);
-
-        // Reset form
-        setBlockedDates([]);
-        setSelectedDate("");
-        setBlockedStartTime("");
-        setBlockedEndTime("");
-        setBlockedReason("Maintenance");
-        setBlockedNote("");
-
-    } catch (error) {
-        console.error("Block slots error:", error);
-
-        setBlockError(
-            error instanceof Error
-                ? error.message
-                : "Failed to block dates."
-        );
-    } finally {
-        setBlockLoading(false);
-    }
-};
-
+    };
     const handleUnblockSlot = async (id: string) => {
         try {
+            setBlockError("");
+            setBlockSuccess("");
+
             const token = localStorage.getItem("scannerAdminToken");
 
             if (!token) {
@@ -315,15 +338,32 @@ const ScannerAdminDashboard = () => {
 
             const result = await response.json();
 
+            if (response.status === 401) {
+                localStorage.removeItem("scannerAdminToken");
+                localStorage.removeItem("scannerAdmin");
+
+                window.location.href = "/scanner-admin/login";
+                return;
+            }
+
             if (!response.ok) {
                 throw new Error(
                     result.message || "Failed to unblock date."
                 );
             }
 
+            // Remove from current list
             setBlockedSlots((prev) =>
                 prev.filter((slot) => slot._id !== id)
             );
+
+            // Show success popup
+            setBlockSuccess("Date unblocked successfully.");
+
+            // Hide popup after 4 seconds
+            setTimeout(() => {
+                setBlockSuccess("");
+            }, 4000);
 
         } catch (error) {
             console.error("Unblock slot error:", error);
@@ -335,6 +375,122 @@ const ScannerAdminDashboard = () => {
             );
         }
     };
+
+    const handleEditBlockedSlot = (slot: BlockedSlot) => {
+    setEditingBlockedSlot(slot);
+
+    setEditDate(slot.date);
+    setEditStartTime(slot.startTime || "");
+    setEditEndTime(slot.endTime || "");
+    setEditReason(slot.reason || "Maintenance");
+    setEditNote(slot.note || "");
+
+    setBlockError("");
+};
+
+const handleUpdateBlockedSlot = async () => {
+    if (!editingBlockedSlot) return;
+
+    try {
+        setEditLoading(true);
+        setBlockError("");
+
+        if (!editDate) {
+            setBlockError("Please select a date.");
+            return;
+        }
+
+        if (editStartTime && !editEndTime) {
+            setBlockError("Please select an end time.");
+            return;
+        }
+
+        if (!editStartTime && editEndTime) {
+            setBlockError("Please select a start time.");
+            return;
+        }
+
+        if (
+            editStartTime &&
+            editEndTime &&
+            convertTimeToMinutes(editEndTime) <=
+                convertTimeToMinutes(editStartTime)
+        ) {
+            setBlockError("End time must be later than start time.");
+            return;
+        }
+
+        const token = localStorage.getItem("scannerAdminToken");
+
+        if (!token) {
+            window.location.href = "/scanner-admin/login";
+            return;
+        }
+
+        const response = await fetch(
+            `${API_BASE_URL}/scanner-admin/blocked-slots/${editingBlockedSlot._id}`,
+            {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    date: editDate,
+                    startTime: editStartTime,
+                    endTime: editEndTime,
+                    reason: editReason,
+                    note: editNote.trim(),
+                }),
+            }
+        );
+
+        const result = await response.json();
+
+        if (response.status === 401) {
+            localStorage.removeItem("scannerAdminToken");
+            localStorage.removeItem("scannerAdmin");
+
+            window.location.href = "/scanner-admin/login";
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                result.message || "Failed to update blocked date."
+            );
+        }
+
+        // Update the existing item in the list
+        setBlockedSlots((prev) =>
+            prev.map((slot) =>
+                slot._id === editingBlockedSlot._id
+                    ? result.data
+                    : slot
+            )
+        );
+
+        setEditingBlockedSlot(null);
+        setEditDate("");
+        setEditStartTime("");
+        setEditEndTime("");
+        setEditReason("Maintenance");
+        setEditNote("");
+
+        setBlockSuccess("Unavailable date updated successfully.");
+
+    } catch (error) {
+        console.error("Update blocked slot error:", error);
+
+        setBlockError(
+            error instanceof Error
+                ? error.message
+                : "Failed to update blocked date."
+        );
+    } finally {
+        setEditLoading(false);
+    }
+};
 
     useEffect(() => {
         fetchBookings();
@@ -604,6 +760,41 @@ const ScannerAdminDashboard = () => {
 
     return (
         <div className="min-h-screen bg-gray-50">
+            {blockSuccess && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 p-4">
+                    <div className="w-full max-w-sm rounded-2xl border border-green-200 bg-white p-6 shadow-2xl">
+
+                        {/* Success Icon */}
+                        <div className="flex justify-center">
+                            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-600">
+                                <CheckCircle2 size={30} />
+                            </div>
+                        </div>
+
+                        {/* Message */}
+                        <div className="mt-4 text-center">
+                            <h3 className="text-lg font-bold text-gray-800">
+                                Success
+                            </h3>
+
+                            <p className="mt-1 text-sm text-gray-500">
+                                {blockSuccess}
+                            </p>
+                        </div>
+
+                        {/* Close Button */}
+                        <div className="mt-5 flex justify-center">
+                            <button
+                                type="button"
+                                onClick={() => setBlockSuccess("")}
+                                className="rounded-lg bg-[#0A2D63] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[#08234e]"
+                            >
+                                OK
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* --------------------------------------------------
                 Desktop Sidebar
@@ -642,18 +833,6 @@ const ScannerAdminDashboard = () => {
 
                     </div>
                 </div>
-
-                <div className="absolute bottom-0 left-0 right-0 border-t border-gray-100 p-4">
-
-                    <button
-                        onClick={handleLogout}
-                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-medium text-gray-900 transition hover:bg-red-60 hover:text-red-600"
-                    >
-                        <LogOut size={18} />
-                        Logout
-                    </button>
-
-                </div>
             </aside>
 
             {/* --------------------------------------------------
@@ -686,40 +865,42 @@ const ScannerAdminDashboard = () => {
             </header>
 
             {/* --------------------------------------------------
-                Mobile Menu
-            -------------------------------------------------- */}
+    Mobile Menu
+-------------------------------------------------- */}
 
-            {mobileMenuOpen && (
-                <div className="fixed left-0 right-0 top-16 z-40 border-b border-gray-200 bg-white p-4 shadow-md xl:hidden">
+{mobileMenuOpen && (
+    <div className="fixed left-0 right-0 top-16 z-40 border-b border-gray-200 bg-white p-4 shadow-md xl:hidden">
 
-                    <div className="rounded-xl bg-[#0A2D63] px-4 py-3 text-white">
+        <div className="rounded-xl bg-[#0A2D63] px-4 py-3 text-white">
 
-                        <div className="flex items-center gap-3">
-                            <CalendarDays size={19} />
+            <div className="flex items-center gap-3">
+                <CalendarDays size={19} />
 
-                            <div>
-                                <p className="text-sm font-semibold">
-                                    Scanner Bookings
-                                </p>
+                <div>
+                    <p className="text-sm font-semibold">
+                        Scanner Bookings
+                    </p>
 
-                                <p className="text-xs text-blue-100">
-                                    Management
-                                </p>
-                            </div>
-                        </div>
-
-                    </div>
-
-                    <button
-                        onClick={handleLogout}
-                        className="mt-3 flex w-full items-center gap-3 rounded-lg px-3 py-3 text-sm text-gray-600 transition hover:bg-red-50 hover:text-red-600"
-                    >
-                        <LogOut size={18} />
-                        Logout
-                    </button>
-
+                    <p className="text-xs text-blue-100">
+                        Management
+                    </p>
                 </div>
-            )}
+            </div>
+
+        </div>
+
+        {/* Logout - Mobile */}
+        <button
+            type="button"
+            onClick={handleLogout}
+            className="mt-3 flex w-full items-center gap-3 rounded-lg px-3 py-3 text-sm text-gray-600 transition hover:bg-red-50 hover:text-red-600"
+        >
+            <LogOut size={18} />
+            Logout
+        </button>
+
+    </div>
+)}
 
             {/* --------------------------------------------------
                 Main
@@ -729,20 +910,31 @@ const ScannerAdminDashboard = () => {
 
                 <div className="p-4 sm:p-8 lg:p-10">
 
-                    {/* Welcome */}
 
-                    <div className="mb-6 sm:mb-7">
 
-                        <h3 className="text-xl font-bold text-gray-800 sm:text-2xl">
-                            Welcome back, Scanner Admin
-                        </h3>
+                    <div className="mb-6 flex items-start justify-between gap-4 sm:mb-7">
 
-                        <p className="mt-1 text-xs leading-5 text-gray-500 sm:text-sm">
-                            Here's an overview of your scanner booking requests.
-                        </p>
+                        {/* Welcome */}
+                        <div>
+                            <h3 className="text-xl font-bold text-gray-800 sm:text-2xl">
+                                Welcome back, Scanner Admin
+                            </h3>
+
+                            <p className="mt-1 text-xs leading-5 text-gray-500 sm:text-sm">
+                                Here's an overview of your scanner booking requests.
+                            </p>
+                        </div>
+
+                        {/* Logout */}
+                        <button
+                            type="button"
+                            onClick={handleLogout}
+                            className="hidden xl:inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#0A2D63] px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[#08234e] sm:px-4"                        >
+                            
+                            <span>Logout</span>
+                        </button>
 
                     </div>
-
                     {/* --------------------------------------------------
                         Stats
                     -------------------------------------------------- */}
@@ -1718,21 +1910,26 @@ const ScannerAdminDashboard = () => {
                                                     </div>
 
 
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            handleUnblockSlot(
-                                                                slot._id
-                                                            )
-                                                        }
-                                                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100"
-                                                    >
+                                                   <div className="flex shrink-0 gap-2">
+    <button
+        type="button"
+        onClick={() => handleEditBlockedSlot(slot)}
+        className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#0A2D63]/20 bg-blue-50 px-4 py-2 text-xs font-semibold text-[#0A2D63] transition hover:bg-blue-100"
+    >
+        Edit
+    </button>
 
-                                                        <X size={15} />
-
-                                                        Unblock
-
-                                                    </button>
+    <button
+        type="button"
+        onClick={() =>
+            handleUnblockSlot(slot._id)
+        }
+        className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100"
+    >
+        <X size={15} />
+        Unblock
+    </button>
+</div>
 
                                                 </div>
 
@@ -1857,9 +2054,8 @@ const ScannerAdminDashboard = () => {
                                         <p className="text-xs font-medium text-gray-500">
                                             Requested Dates & Time Slots
                                         </p>
-
                                         <p className="mt-1 text-xs text-gray-400">
-                                            Admin can modify the time slot before approving the booking  if they have any concern.
+                                            Admin can modify the booking date and time slot before approving the booking if required.
                                         </p>
                                     </div>
 
@@ -1874,15 +2070,35 @@ const ScannerAdminDashboard = () => {
                                                     key={`${slot.date}-${index}`}
                                                     className="rounded-xl border border-gray-200 bg-gray-50 p-4"
                                                 >
+                                                    
                                                     {/* Date */}
                                                     <div className="mb-4">
-                                                        <p className="text-xs font-medium text-gray-500">
-                                                            Date
-                                                        </p>
+                                                        <label className="mb-1.5 block text-xs font-medium text-gray-600">
+                                                            Booking Date
+                                                        </label>
 
-                                                        <p className="mt-1 text-sm font-semibold text-gray-800">
-                                                            {formatDate(slot.date)}
-                                                        </p>
+                                                        <input
+                                                            type="date"
+                                                            value={slot.date}
+                                                            onChange={(e) => {
+                                                                const updatedSlots = [
+                                                                    ...selectedBookingSlots,
+                                                                ];
+
+                                                                updatedSlots[index] = {
+                                                                    ...updatedSlots[index],
+                                                                    date: e.target.value,
+                                                                };
+
+                                                                setSelectedBookingSlots(updatedSlots);
+                                                                setActionError("");
+                                                            }}
+                                                            disabled={
+                                                                selectedBooking.status !== "pending"
+                                                            }
+                                                            min={new Date().toISOString().split("T")[0]}
+                                                            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#0A2D63] focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-gray-100"
+                                                        />
                                                     </div>
 
                                                     {/* Time Selection */}
@@ -2140,6 +2356,218 @@ const ScannerAdminDashboard = () => {
                 </div>
 
             )}
+
+            {editingBlockedSlot && (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4">
+        <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+                <div>
+                    <h3 className="text-lg font-bold text-gray-800">
+                        Edit Unavailable Slot
+                    </h3>
+
+                    <p className="mt-1 text-xs text-gray-500">
+                        Modify the blocked date or time without unblocking it.
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={() => setEditingBlockedSlot(null)}
+                    className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+                >
+                    <X size={20} />
+                </button>
+            </div>
+
+            {/* Body */}
+            <div className="space-y-4 p-5">
+
+                {/* Date */}
+                <div>
+                    <label className="mb-1.5 block text-xs font-medium text-gray-600">
+                        Unavailable Date
+                    </label>
+
+                    <input
+                        type="date"
+                        value={editDate}
+                        min={new Date().toISOString().split("T")[0]}
+                        onChange={(e) => {
+                            setEditDate(e.target.value);
+                            setBlockError("");
+                        }}
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#0A2D63] focus:ring-2 focus:ring-blue-100"
+                    />
+                </div>
+
+                {/* Time */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+                    {/* Start */}
+                    <div>
+                        <label className="mb-1.5 block text-xs font-medium text-gray-600">
+                            Start Time
+                            <span className="ml-1 text-gray-400">
+                                (Optional)
+                            </span>
+                        </label>
+
+                        <select
+                            value={editStartTime}
+                            onChange={(e) => {
+                                setEditStartTime(e.target.value);
+
+                                // Clear end time when switching to entire day
+                                if (!e.target.value) {
+                                    setEditEndTime("");
+                                }
+
+                                setBlockError("");
+                            }}
+                            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#0A2D63] focus:ring-2 focus:ring-blue-100"
+                        >
+                            <option value="">
+                                Entire Day
+                            </option>
+
+                            {timeOptions.map((time) => (
+                                <option
+                                    key={time}
+                                    value={time}
+                                >
+                                    {time}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* End */}
+                    <div>
+                        <label className="mb-1.5 block text-xs font-medium text-gray-600">
+                            End Time
+                            <span className="ml-1 text-gray-400">
+                                (Optional)
+                            </span>
+                        </label>
+
+                        <select
+                            value={editEndTime}
+                            onChange={(e) => {
+                                setEditEndTime(e.target.value);
+                                setBlockError("");
+                            }}
+                            disabled={!editStartTime}
+                            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#0A2D63] focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-gray-100"
+                        >
+                            <option value="">
+                                Select end time
+                            </option>
+
+                            {timeOptions.map((time) => (
+                                <option
+                                    key={time}
+                                    value={time}
+                                >
+                                    {time}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
+                {/* Reason */}
+                <div>
+                    <label className="mb-1.5 block text-xs font-medium text-gray-600">
+                        Reason
+                    </label>
+
+                    <select
+                        value={editReason}
+                        onChange={(e) =>
+                            setEditReason(e.target.value)
+                        }
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#0A2D63] focus:ring-2 focus:ring-blue-100"
+                    >
+                        <option value="Maintenance">
+                            Maintenance
+                        </option>
+
+                        <option value="Calibration">
+                            Calibration
+                        </option>
+
+                        <option value="Repair">
+                            Repair
+                        </option>
+
+                        <option value="Holiday">
+                            Holiday
+                        </option>
+
+                        <option value="Other">
+                            Other
+                        </option>
+                    </select>
+                </div>
+
+                {/* Note */}
+                <div>
+                    <label className="mb-1.5 block text-xs font-medium text-gray-600">
+                        Note
+                        <span className="ml-1 text-gray-400">
+                            (Optional)
+                        </span>
+                    </label>
+
+                    <textarea
+                        value={editNote}
+                        onChange={(e) =>
+                            setEditNote(e.target.value)
+                        }
+                        rows={3}
+                        placeholder="Add a note..."
+                        className="w-full resize-y rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#0A2D63] focus:ring-2 focus:ring-blue-100"
+                    />
+                </div>
+
+                {/* Error */}
+                {blockError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                        {blockError}
+                    </div>
+                )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end gap-3 border-t border-gray-200 px-5 py-4">
+
+                <button
+                    type="button"
+                    onClick={() => setEditingBlockedSlot(null)}
+                    disabled={editLoading}
+                    className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-50"
+                >
+                    Cancel
+                </button>
+
+                <button
+                    type="button"
+                    onClick={handleUpdateBlockedSlot}
+                    disabled={editLoading}
+                    className="rounded-lg bg-[#0A2D63] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#08234e] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    {editLoading
+                        ? "Saving..."
+                        : "Save Changes"}
+                </button>
+
+            </div>
+        </div>
+    </div>
+)}
 
 
         </div>
