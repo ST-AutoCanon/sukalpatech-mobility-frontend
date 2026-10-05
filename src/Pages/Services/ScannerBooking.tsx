@@ -31,9 +31,15 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
         concerns: "",
     });
 
-    const [currentMonth, setCurrentMonth] = useState(
-        new Date(2026, 8, 1)
+    const [currentMonth, setCurrentMonth] = useState(() => {
+    const today = new Date();
+
+    return new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        1
     );
+});
 
 
     const [selectedDates, setSelectedDates] = useState<string[]>([]);

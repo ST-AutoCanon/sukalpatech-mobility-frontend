@@ -126,7 +126,7 @@ const Header = () => {
                   }}
                   className="block px-5 py-4 border-t hover:bg-[#0A2D63] hover:text-white"
                 >
-                  Scanner Availability
+                  3D Scanning
                 </Link>
 
               </div>
@@ -318,7 +318,7 @@ const Header = () => {
                     }}
                     className="block px-10 py-3 hover:bg-gray-100"
                   >
-                    Scanner Availability
+                    3D Scanning
                   </Link>
                 </div>
               )}
