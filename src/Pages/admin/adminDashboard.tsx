@@ -297,11 +297,6 @@ const [editLoading, setEditLoading] = useState(false);
             setBlockedReason("Maintenance");
             setBlockedNote("");
 
-            // Automatically hide success message after 4 seconds
-            setTimeout(() => {
-                setBlockSuccess("");
-            }, 4000);
-
         } catch (error) {
             console.error("Block slots error:", error);
 
@@ -359,11 +354,6 @@ const [editLoading, setEditLoading] = useState(false);
 
             // Show success popup
             setBlockSuccess("Date unblocked successfully.");
-
-            // Hide popup after 4 seconds
-            setTimeout(() => {
-                setBlockSuccess("");
-            }, 4000);
 
         } catch (error) {
             console.error("Unblock slot error:", error);

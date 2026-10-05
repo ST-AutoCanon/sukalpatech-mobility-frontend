@@ -1076,16 +1076,16 @@ const ScannerBookingModal: React.FC<ScannerBookingModalProps> = ({
                                             const dateStatusClass = pastDate
                                                 ? "bg-gray-100 text-gray-500 cursor-not-allowed"
                                                 : isFullyBlocked
-                                                    ? "bg-red-100 text-red-900 cursor-not-allowed"
+                                                    ? "bg-red-400 text-red-900 cursor-not-allowed"
                                                     : isSelected
                                                         ? "bg-[#4334E8] text-white"
                                                         : isPartiallyBlocked
-                                                            ? "bg-orange-100 text-orange-800 hover:bg-orange-200"
+                                                            ? "bg-orange-400 text-orange-800 hover:bg-orange-200"
                                                             : dateStatus === "reserved"
-                                                                ? "bg-blue-100 text-blue-900 hover:bg-blue-200"
+                                                                ? "bg-blue-400 text-blue-900 hover:bg-blue-200"
                                                                 : dateStatus === "pending"
-                                                                    ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
-                                                                    : "bg-green-100 text-green-700 hover:bg-green-200";
+                                                                    ? "bg-yellow-300 text-yellow-700 hover:bg-yellow-200"
+                                                                    : "bg-green-200 text-green-700 hover:bg-green-200";
 
                                             return (
                                                 <button
