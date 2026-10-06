@@ -1,13 +1,21 @@
-import { useState } from "react";
-import { NavLink, Link, useNavigate } from "react-router-dom";
+import { NavLink, Link, useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { Menu, X, ChevronDown } from "lucide-react";
 import logo from "../assets/SukalpaLogo.png";
 
 const Header = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
+
+  useEffect(() => {
+  setMenuOpen(false);
+  setServicesOpen(false);
+  setCapabilitiesOpen(false);
+}, [location.pathname]);
 
   const navItems = [
     { name: "Home", path: "/" },
