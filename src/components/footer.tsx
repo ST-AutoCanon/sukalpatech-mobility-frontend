@@ -69,7 +69,8 @@ const Footer = () => {
               <div>
                 <p className="text-xs text-gray-500">Call Us</p>
                 <p className="text-sm font-semibold text-[#0A2D63]">
-                  +91 98765 43210
+                  +918151035435 <br></br>
+                  +917349758001
                 </p>
               </div>
             </div>
@@ -82,7 +83,7 @@ const Footer = () => {
               <div>
                 <p className="text-xs text-gray-500">Email</p>
                 <p className="text-sm font-semibold text-[#0A2D63]">
-                  info@sukalpamobility.com
+                  om@sukalpamobility.com
                 </p>
               </div>
             </div>
