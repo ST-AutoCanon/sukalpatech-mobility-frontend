@@ -3,6 +3,18 @@ import { useEffect, useState } from "react";
 import { Menu, X, ChevronDown } from "lucide-react";
 import logo from "../assets/SukalpaLogo.png";
 
+const getActiveTabFromPath = (pathname: string) => {
+  if (pathname === "/") return "Home";
+  if (pathname === "/about") return "About Us";
+  if (pathname === "/careers") return "Careers";
+  if (pathname === "/enquiry") return "Contact Us";
+
+  if (pathname.startsWith("/services/")) return "Services";
+  if (pathname.startsWith("/capabilities/")) return "Capabilities";
+
+  return "";
+};
+
 const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -11,16 +23,28 @@ const Header = () => {
   const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
 
+  const [activeTab, setActiveTab] = useState(() =>
+    getActiveTabFromPath(location.pathname)
+  );
+
+  /*
+   * Only close menus when the URL actually changes.
+   * Do NOT set activeTab here.
+   *
+   * This allows:
+   * Careers -> Services
+   * and Services becomes active immediately even though
+   * the current URL may still be /careers.
+   */
   useEffect(() => {
-  setMenuOpen(false);
-  setServicesOpen(false);
-  setCapabilitiesOpen(false);
-}, [location.pathname]);
+    setMenuOpen(false);
+    setServicesOpen(false);
+    setCapabilitiesOpen(false);
+  }, [location.pathname]);
 
   const navItems = [
     { name: "Home", path: "/" },
     { name: "About Us", path: "/about" },
-
   ];
 
   return (
@@ -28,8 +52,11 @@ const Header = () => {
       <div className="w-full px-4 sm:px-6 lg:px-7 py-3 flex items-center justify-between">
 
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-3 ml-3 sm:ml-4 lg:ml-9">
-          {/* Logo symbol only */}
+        <Link
+          to="/"
+          onClick={() => setActiveTab("Home")}
+          className="flex items-center gap-3 ml-3 sm:ml-4 lg:ml-9"
+        >
           <img
             src={logo}
             alt="Logo"
@@ -37,7 +64,6 @@ const Header = () => {
           />
 
           <div>
-            {/* Sukalpa */}
             <h1
               className="text-2xl sm:text-3xl lg:text-[35px] font-semibold text-[#0A2D63] leading-none"
               style={{ fontFamily: "'Insignia Roman', serif" }}
@@ -45,7 +71,6 @@ const Header = () => {
               Sukalpa
             </h1>
 
-            {/* Mobility Services */}
             <p
               className="text-[10px] sm:text-xs lg:text-[16px] uppercase tracking-wide text-[#7BAF2A] leading-none mt-1"
               style={{ fontFamily: "'Tamrin', sans-serif" }}
@@ -58,29 +83,32 @@ const Header = () => {
         {/* Desktop Navigation */}
         <nav className="hidden lg:flex items-center gap-9 text-lg font-semibold ml-2">
 
-          {navItems.slice(0, 4).map((item) => (
+          {/* Home + About Us */}
+          {navItems.map((item) => (
             <NavLink
               key={item.name}
               to={item.path}
               end={item.path === "/"}
-              className={({ isActive }) =>
-                `relative pb-1 ${isActive
-                  ? "text-green-600"
-                  : "text-gray-700 hover:text-green-600"
+              onClick={() => {
+                setActiveTab(item.name);
+                setServicesOpen(false);
+                setCapabilitiesOpen(false);
+              }}
+              className={() =>
+                `relative pb-1 ${
+                  activeTab === item.name
+                    ? "text-green-600"
+                    : "text-gray-700 hover:text-green-600"
                 }`
               }
             >
-              {({ isActive }) => (
-                <>
-                  {item.name}
-                  {isActive && (
-                    <span className="absolute left-0 -bottom-1 w-full h-[2px] bg-green-600" />
-                  )}
-                </>
+              {item.name}
+
+              {activeTab === item.name && (
+                <span className="absolute left-0 -bottom-1 w-full h-[2px] bg-green-600" />
               )}
             </NavLink>
           ))}
-
 
           {/* Services Dropdown */}
           <div className="relative">
@@ -88,15 +116,26 @@ const Header = () => {
               onClick={() => {
                 setServicesOpen((prev) => !prev);
                 setCapabilitiesOpen(false);
+                setActiveTab("Services");
               }}
-              className="flex items-center gap-1 text-gray-700 hover:text-green-600 py-2"
+              className={`relative flex items-center gap-1 py-2 ${
+                activeTab === "Services"
+                  ? "text-green-600"
+                  : "text-gray-700 hover:text-green-600"
+              }`}
             >
               Services
+
               <ChevronDown
                 size={18}
-                className={`transition-transform ${servicesOpen ? "rotate-180" : ""
-                  }`}
+                className={`transition-transform ${
+                  servicesOpen ? "rotate-180" : ""
+                }`}
               />
+
+              {activeTab === "Services" && (
+                <span className="absolute left-0 -bottom-1 w-full h-[2px] bg-green-600" />
+              )}
             </button>
 
             {servicesOpen && (
@@ -104,7 +143,10 @@ const Header = () => {
 
                 <Link
                   to="/services/spare-parts"
-                  onClick={() => setServicesOpen(false)}
+                  onClick={() => {
+                    setActiveTab("Services");
+                    setServicesOpen(false);
+                  }}
                   className="block px-5 py-4 hover:bg-[#0A2D63] hover:text-white"
                 >
                   Spare Parts Management
@@ -112,7 +154,10 @@ const Header = () => {
 
                 <Link
                   to="/services/technical-support"
-                  onClick={() => setServicesOpen(false)}
+                  onClick={() => {
+                    setActiveTab("Services");
+                    setServicesOpen(false);
+                  }}
                   className="block px-5 py-4 border-t hover:bg-[#0A2D63] hover:text-white"
                 >
                   Technical Support
@@ -120,7 +165,10 @@ const Header = () => {
 
                 <Link
                   to="/services/technical-documentation"
-                  onClick={() => setServicesOpen(false)}
+                  onClick={() => {
+                    setActiveTab("Services");
+                    setServicesOpen(false);
+                  }}
                   className="block px-5 py-4 border-t hover:bg-[#0A2D63] hover:text-white"
                 >
                   Technical Documentation
@@ -129,6 +177,7 @@ const Header = () => {
                 <Link
                   to="/services/scanner-availability"
                   onClick={() => {
+                    setActiveTab("Services");
                     setMenuOpen(false);
                     setServicesOpen(false);
                   }}
@@ -136,32 +185,47 @@ const Header = () => {
                 >
                   3D Scanning
                 </Link>
-
               </div>
             )}
           </div>
 
+          {/* Capabilities Dropdown */}
           <div className="relative">
             <button
               onClick={() => {
                 setCapabilitiesOpen((prev) => !prev);
                 setServicesOpen(false);
+                setActiveTab("Capabilities");
               }}
-              className="flex items-center gap-1 text-gray-700 hover:text-green-600 py-2"
+              className={`relative flex items-center gap-1 py-2 ${
+                activeTab === "Capabilities"
+                  ? "text-green-600"
+                  : "text-gray-700 hover:text-green-600"
+              }`}
             >
               Capabilities
+
               <ChevronDown
                 size={18}
-                className={`transition-transform duration-200 ${capabilitiesOpen ? "rotate-180" : ""
-                  }`}
+                className={`transition-transform duration-200 ${
+                  capabilitiesOpen ? "rotate-180" : ""
+                }`}
               />
+
+              {activeTab === "Capabilities" && (
+                <span className="absolute left-0 -bottom-1 w-full h-[2px] bg-green-600" />
+              )}
             </button>
 
             {capabilitiesOpen && (
               <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-72 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden z-50">
+
                 <Link
                   to="/capabilities/new-proto-development"
-                  onClick={() => setCapabilitiesOpen(false)}
+                  onClick={() => {
+                    setActiveTab("Capabilities");
+                    setCapabilitiesOpen(false);
+                  }}
                   className="block px-5 py-4 text-gray-700 hover:bg-[#0A2D63] hover:text-white transition"
                 >
                   New Proto Development
@@ -169,7 +233,10 @@ const Header = () => {
 
                 <Link
                   to="/capabilities/pre-homologation"
-                  onClick={() => setCapabilitiesOpen(false)}
+                  onClick={() => {
+                    setActiveTab("Capabilities");
+                    setCapabilitiesOpen(false);
+                  }}
                   className="block px-5 py-4 text-gray-700 hover:bg-[#0A2D63] hover:text-white border-t transition"
                 >
                   Pre Homologation
@@ -177,7 +244,10 @@ const Header = () => {
 
                 <Link
                   to="/capabilities/post-production"
-                  onClick={() => setCapabilitiesOpen(false)}
+                  onClick={() => {
+                    setActiveTab("Capabilities");
+                    setCapabilitiesOpen(false);
+                  }}
                   className="block px-5 py-4 text-gray-700 hover:bg-[#0A2D63] hover:text-white border-t transition"
                 >
                   Post Production
@@ -185,50 +255,60 @@ const Header = () => {
               </div>
             )}
           </div>
+
+          {/* Careers */}
           <NavLink
             to="/careers"
-            className={({ isActive }) =>
-              `relative pb-1 ${isActive
-                ? "text-green-600"
-                : "text-gray-700 hover:text-green-600"
+            onClick={() => {
+              setActiveTab("Careers");
+              setServicesOpen(false);
+              setCapabilitiesOpen(false);
+            }}
+            className={() =>
+              `relative pb-1 ${
+                activeTab === "Careers"
+                  ? "text-green-600"
+                  : "text-gray-700 hover:text-green-600"
               }`
             }
           >
-            {({ isActive }) => (
-              <>
-                Careers
-                {isActive && (
-                  <span className="absolute left-0 -bottom-1 w-full h-[2px] bg-green-600" />
-                )}
-              </>
+            Careers
+
+            {activeTab === "Careers" && (
+              <span className="absolute left-0 -bottom-1 w-full h-[2px] bg-green-600" />
             )}
           </NavLink>
 
+          {/* Contact Us */}
           <NavLink
             to="/enquiry"
-            className={({ isActive }) =>
-              `relative pb-1 ${isActive
-                ? "text-green-600"
-                : "text-gray-700 hover:text-green-600"
+            onClick={() => {
+              setActiveTab("Contact Us");
+              setServicesOpen(false);
+              setCapabilitiesOpen(false);
+            }}
+            className={() =>
+              `relative pb-1 ${
+                activeTab === "Contact Us"
+                  ? "text-green-600"
+                  : "text-gray-700 hover:text-green-600"
               }`
             }
           >
-            {({ isActive }) => (
-              <>
-                Contact Us
-                {isActive && (
-                  <span className="absolute left-0 -bottom-1 w-full h-[2px] bg-green-600" />
-                )}
-              </>
+            Contact Us
+
+            {activeTab === "Contact Us" && (
+              <span className="absolute left-0 -bottom-1 w-full h-[2px] bg-green-600" />
             )}
           </NavLink>
+
+          {/* Login */}
           <button
             onClick={() => navigate("/scanner-admin/login")}
             className="ml-2 rounded-lg bg-[#0A2D63] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#08234e]"
           >
-             Login
+            Login
           </button>
-
         </nav>
 
         {/* Mobile Menu Button */}
@@ -249,17 +329,21 @@ const Header = () => {
         <div className="lg:hidden bg-white border-t shadow-md">
           <div className="flex flex-col py-2">
 
-            {/* Home, About, Contact */}
+            {/* Home + About Us */}
             {navItems.map((item) => (
               <NavLink
                 key={item.name}
                 to={item.path}
                 end={item.path === "/"}
-                onClick={() => setMenuOpen(false)}
-                className={({ isActive }) =>
-                  `block px-6 py-4 font-semibold ${isActive
-                    ? "text-green-600 bg-gray-50"
-                    : "text-gray-700"
+                onClick={() => {
+                  setActiveTab(item.name);
+                  setMenuOpen(false);
+                }}
+                className={() =>
+                  `block px-6 py-4 font-semibold ${
+                    activeTab === item.name
+                      ? "text-green-600 bg-gray-50"
+                      : "text-gray-700"
                   }`
                 }
               >
@@ -273,14 +357,21 @@ const Header = () => {
                 onClick={() => {
                   setServicesOpen((prev) => !prev);
                   setCapabilitiesOpen(false);
+                  setActiveTab("Services");
                 }}
-                className="w-full flex justify-between items-center px-6 py-4 font-semibold text-gray-700"
+                className={`w-full flex justify-between items-center px-6 py-4 font-semibold ${
+                  activeTab === "Services"
+                    ? "text-green-600"
+                    : "text-gray-700"
+                }`}
               >
                 Services
+
                 <ChevronDown
                   size={18}
-                  className={`transition-transform ${servicesOpen ? "rotate-180" : ""
-                    }`}
+                  className={`transition-transform ${
+                    servicesOpen ? "rotate-180" : ""
+                  }`}
                 />
               </button>
 
@@ -289,6 +380,7 @@ const Header = () => {
                   <Link
                     to="/services/spare-parts"
                     onClick={() => {
+                      setActiveTab("Services");
                       setMenuOpen(false);
                       setServicesOpen(false);
                     }}
@@ -300,6 +392,7 @@ const Header = () => {
                   <Link
                     to="/services/technical-support"
                     onClick={() => {
+                      setActiveTab("Services");
                       setMenuOpen(false);
                       setServicesOpen(false);
                     }}
@@ -311,6 +404,7 @@ const Header = () => {
                   <Link
                     to="/services/technical-documentation"
                     onClick={() => {
+                      setActiveTab("Services");
                       setMenuOpen(false);
                       setServicesOpen(false);
                     }}
@@ -318,9 +412,11 @@ const Header = () => {
                   >
                     Technical Documentation
                   </Link>
+
                   <Link
                     to="/services/scanner-availability"
                     onClick={() => {
+                      setActiveTab("Services");
                       setMenuOpen(false);
                       setServicesOpen(false);
                     }}
@@ -338,14 +434,21 @@ const Header = () => {
                 onClick={() => {
                   setCapabilitiesOpen((prev) => !prev);
                   setServicesOpen(false);
+                  setActiveTab("Capabilities");
                 }}
-                className="w-full flex justify-between items-center px-6 py-4 font-semibold text-gray-700"
+                className={`w-full flex justify-between items-center px-6 py-4 font-semibold ${
+                  activeTab === "Capabilities"
+                    ? "text-green-600"
+                    : "text-gray-700"
+                }`}
               >
                 Capabilities
+
                 <ChevronDown
                   size={18}
-                  className={`transition-transform ${capabilitiesOpen ? "rotate-180" : ""
-                    }`}
+                  className={`transition-transform ${
+                    capabilitiesOpen ? "rotate-180" : ""
+                  }`}
                 />
               </button>
 
@@ -354,6 +457,7 @@ const Header = () => {
                   <Link
                     to="/capabilities/new-proto-development"
                     onClick={() => {
+                      setActiveTab("Capabilities");
                       setMenuOpen(false);
                       setCapabilitiesOpen(false);
                     }}
@@ -365,6 +469,7 @@ const Header = () => {
                   <Link
                     to="/capabilities/pre-homologation"
                     onClick={() => {
+                      setActiveTab("Capabilities");
                       setMenuOpen(false);
                       setCapabilitiesOpen(false);
                     }}
@@ -376,6 +481,7 @@ const Header = () => {
                   <Link
                     to="/capabilities/post-production"
                     onClick={() => {
+                      setActiveTab("Capabilities");
                       setMenuOpen(false);
                       setCapabilitiesOpen(false);
                     }}
@@ -386,14 +492,19 @@ const Header = () => {
                 </div>
               )}
             </div>
+
             {/* Careers */}
             <NavLink
               to="/careers"
-              onClick={() => setMenuOpen(false)}
-              className={({ isActive }) =>
-                `block px-6 py-4 font-semibold ${isActive
-                  ? "text-green-600 bg-gray-50"
-                  : "text-gray-700"
+              onClick={() => {
+                setActiveTab("Careers");
+                setMenuOpen(false);
+              }}
+              className={() =>
+                `block px-6 py-4 font-semibold ${
+                  activeTab === "Careers"
+                    ? "text-green-600 bg-gray-50"
+                    : "text-gray-700"
                 }`
               }
             >
@@ -403,28 +514,33 @@ const Header = () => {
             {/* Contact Us */}
             <NavLink
               to="/enquiry"
-              onClick={() => setMenuOpen(false)}
-              className={({ isActive }) =>
-                `block px-6 py-4 font-semibold ${isActive
-                  ? "text-green-600 bg-gray-50"
-                  : "text-gray-700"
+              onClick={() => {
+                setActiveTab("Contact Us");
+                setMenuOpen(false);
+              }}
+              className={() =>
+                `block px-6 py-4 font-semibold ${
+                  activeTab === "Contact Us"
+                    ? "text-green-600 bg-gray-50"
+                    : "text-gray-700"
                 }`
               }
             >
               Contact Us
             </NavLink>
-           <button
-  onClick={() => {
-    setMenuOpen(false);
-    setServicesOpen(false);
-    setCapabilitiesOpen(false);
-    navigate("/scanner-admin/login");
-  }}
-  className="mx-6 my-2 rounded-lg bg-[#0A2D63] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#08234e]"
->
-  Login
-</button>
-            
+
+            {/* Login */}
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                setServicesOpen(false);
+                setCapabilitiesOpen(false);
+                navigate("/scanner-admin/login");
+              }}
+              className="mx-6 my-2 rounded-lg bg-[#0A2D63] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#08234e]"
+            >
+              Login
+            </button>
 
           </div>
         </div>
